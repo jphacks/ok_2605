@@ -16,7 +16,7 @@ export default function HomeScreen() {
     <Text style={s.helper}>“飲んで、今日もいい一日にしよう！”</Text>
     <MedicationRegistrationCard />
     <View style={s.card}><Text style={s.label}>{taken ? '今日の服用（デモ）' : '服用予定（デモ）'}</Text><Text style={s.time}>09:00</Text><Text style={s.medicine}>朝のおくすり　/ 1錠</Text>
-      <Pressable style={[s.primary, taken && s.disabled]} disabled={taken} onPress={() => router.push('/qr')}><Text style={s.primaryText}>{taken ? '✓ 服用を記録しました' : '▦  QRを読み取って服用確認'}</Text></Pressable>
+      <Pressable style={[s.primary, taken && s.disabled]} disabled={taken} onPress={() => router.push('/nfc')}><Text style={s.primaryText}>{taken ? '✓ 服用を記録しました' : '◎  薬箱を読み取って服用確認'}</Text></Pressable>
       {!taken && <Pressable accessibilityRole="button" style={s.secondary} onPress={() => router.push('/missed')}><Text style={s.secondaryText}>飲めなかった場合（デモ）</Text></Pressable>}
     </View>
     <View style={s.heading}><Text style={s.sectionTitle}>今週の達成状況</Text><Text style={s.muted}>小さな一歩を、毎日。</Text></View>

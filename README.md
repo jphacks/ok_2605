@@ -153,8 +153,8 @@ IOS_BUNDLE_IDENTIFIER=jp.example.nomupay.dev
 - Personal Teamのプロビジョニングは7日で期限が切れるため、継続利用には再ビルド・再インストールが必要です。登録できるApp ID・端末・インストール数にも制限があります。
 - Personal Teamのビルドを他のメンバーへ配布して共通利用する運用にはしません。各自が自分の端末向けに署名します。
 - Appleの対応表では**NFC Tag Readingは無料のPersonal Teamでは利用できません**。将来iOSでNFCを実機検証する際は対応する有料のチーム署名等を別途検討してください。
-- AndroidにはPersonal Teamに相当する制約はありません。将来はNFC対応端末・ライブラリ・Android権限を追加して再ビルドします。
-- 今回はNFCライブラリ・NFC権限・NFC処理を追加していません。現在のカメラ・SQLite等の構成で開発を始めます。
+- AndroidにはPersonal Teamに相当する制約はありません。NFC対応Android実機では、Development Buildから薬箱のNFCタグを読み取れます。
+- `react-native-nfc-manager`とAndroid NFC権限を追加しています。Expo GoとAndroidエミュレーターではNFCを利用できないため、NFC画面のデモボタンで完了動作を確認します。
 
 [Apple公式：Personal Teamの実機テストと期限](https://developer.apple.com/help/account/basics/about-your-developer-account)
 
@@ -169,6 +169,15 @@ npm start
 ```
 
 標準コマンドは`expo start --dev-client`です。同じLANに接続した端末の開発用アプリでサーバーを選択するか、表示されたQRを読み取ります。LAN上のローカル開発ではExpo Goの同一アカウント認証は使いません。接続できないときはLAN・ファイアウォール・ローカルネットワーク権限を確認してください。
+
+AndroidでNFCを確認する場合は、NFC対応実機にDevelopment Buildを再インストールします。
+
+```sh
+npm run android
+npm start
+```
+
+Expo GoまたはAndroidエミュレーターで画面だけを確認する場合は`npx expo start --go`を実行します。Expo GoではネイティブNFC読み取りはできません。
 
 TypeScript / JavaScriptや画面のスタイルを保存すると、Fast Refreshで反映されます。状態が残るため画面上の動作も確認し、必要なら開発メニューからReloadしてください。Metroだけなら`npm start -- --clear`でキャッシュを更新できます。
 

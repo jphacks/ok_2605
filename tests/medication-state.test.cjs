@@ -15,3 +15,9 @@ test('the demo QR records once without mutating the initial state', () => {
   assert.equal(initialMedicationState.taken, false);
   assert.equal(medicationReducer(recorded, action), recorded);
 });
+
+test('a non-empty NFC tag identifier records a dose', () => {
+  const recorded = medicationReducer(initialMedicationState, { type: 'confirm-with-nfc', tagId: '04A1B2C3' });
+  assert.equal(recorded.taken, true);
+  assert.equal(medicationReducer(initialMedicationState, { type: 'confirm-with-nfc', tagId: '  ' }), initialMedicationState);
+});
