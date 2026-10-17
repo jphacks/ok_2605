@@ -1,7 +1,32 @@
 import { Link } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { MedicationScreen, medicationColors as C } from '@/components/medication-screen';
 
 export default function ExploreScreen() {
-  return <View style={styles.container}><Text style={styles.title}>設定</Text><Text style={styles.body}>通知・ペナルティ・ご褒美の設定はここから追加します。</Text><Link href="/">ホームへ戻る</Link></View>;
+  return (
+    <MedicationScreen title="設定" description="あなたに合った続け方を。">
+      <View style={styles.card}>
+        {([
+          ['/medications', 'お薬・服用スケジュール'],
+          ['/medications/new', '薬を登録する'],
+          ['/qr', 'QR読み取り（デモ）'],
+        ] as const).map(([href, label]) => (
+          <Link key={href} href={href} asChild>
+            <Pressable accessibilityRole="button" style={styles.row}>
+              <Text style={styles.label}>{label}</Text><Text style={styles.arrow}>›</Text>
+            </Pressable>
+          </Link>
+        ))}
+      </View>
+      <Text style={styles.note}>通知・ペナルティ・ご褒美の設定は今後追加します。</Text>
+    </MedicationScreen>
+  );
 }
-const styles=StyleSheet.create({container:{flex:1,justifyContent:'center',alignItems:'center',padding:24,gap:14},title:{fontSize:24,fontWeight:'700'},body:{textAlign:'center',color:'#72848a'}});
+
+const styles = StyleSheet.create({
+  card: { backgroundColor: '#fff', borderRadius: 20, paddingHorizontal: 20 },
+  row: { minHeight: 60, paddingVertical: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: C.line },
+  label: { color: C.ink, fontSize: 13 },
+  arrow: { color: '#6d9196', fontSize: 22 },
+  note: { fontSize: 11, lineHeight: 21, color: C.muted },
+});

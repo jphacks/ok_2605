@@ -36,6 +36,14 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
+# Local medication databases and SQLite sidecar files
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
 example
 
 # generated native folders

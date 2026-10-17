@@ -1,6 +1,13 @@
 import { Stack } from 'expo-router';
 import { MedicationProvider } from '@/state/medication-context';
+import { MedicationRegistryProvider } from '@/state/medication-registry-context';
 
 export default function RootLayout() {
-  return <MedicationProvider><Stack screenOptions={{ headerShown: false }} /></MedicationProvider>;
+  return (
+    <MedicationProvider>
+      <MedicationRegistryProvider>
+        <Stack screenOptions={{ headerShown: false }} />
+      </MedicationRegistryProvider>
+    </MedicationProvider>
+  );
 }
