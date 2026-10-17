@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 const tabs = [
   { title: 'ホーム', icon: '⌂', href: '/' },
-  { title: '履歴', icon: '▥', href: null },
+  { title: '履歴', icon: '▥', href: '/history' },
   { title: 'お薬', icon: '▤', href: '/medications' },
   { title: '設定', icon: '⚙', href: '/explore' },
 ] as const;
@@ -18,13 +18,13 @@ export function AppBottomNav({ disabled = false }: { disabled?: boolean }) {
           <Pressable
             key={tab.title}
             accessibilityRole="tab"
-            accessibilityLabel={tab.href ? tab.title : '履歴（準備中）'}
-            accessibilityState={{ selected, disabled: disabled || !tab.href }}
-            disabled={disabled || !tab.href}
-            onPress={() => { if (tab.href) router.dismissTo(tab.href); }}
+            accessibilityLabel={tab.title}
+            accessibilityState={{ selected, disabled }}
+            disabled={disabled}
+            onPress={() => router.dismissTo(tab.href)}
             style={[styles.tab, selected && styles.selected]}>
             <Text style={[styles.icon, selected && styles.active]}>{tab.icon}</Text>
-            <Text style={[styles.label, selected && styles.active]}>{tab.title}{!tab.href ? '（準備中）' : ''}</Text>
+            <Text style={[styles.label, selected && styles.active]}>{tab.title}</Text>
           </Pressable>
         );
       })}

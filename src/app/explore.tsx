@@ -9,7 +9,7 @@ export default function ExploreScreen() {
         {([
           ['/medications', 'お薬・服用スケジュール'],
           ['/medications/new', '薬を登録する'],
-          ['/qr', 'QR読み取り（デモ）'],
+          ['/', 'ホーム・今日の服薬'],
           ['/payments', 'ペナルティ課金（デモ）'],
           ['/reminders', '服薬リマインダー'],
         ] as const).map(([href, label]) => (
