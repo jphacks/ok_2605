@@ -1,6 +1,6 @@
 import type { Medication } from './medication.ts';
 
-export type DoseRecordSource = 'qr' | 'demo';
+export type DoseRecordSource = 'qr' | 'demo' | 'nfc';
 
 export type DoseRecord = {
   id: number;

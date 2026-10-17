@@ -1,7 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { router, useRootNavigationState } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type PropsWithChildren } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { reconcileReminders, reminderMedicationId } from '@/features/reminders/reminder-plan';
 import { useMedicationRegistry } from './medication-registry-context';
 
@@ -31,13 +31,18 @@ export function ReminderProvider({ children }: PropsWithChildren) {
     const work = queue.current.then(async () => {
       setBusy(true); setError(null);
       try {
+        if (Platform.OS === 'android') {
+          await Notifications.setNotificationChannelAsync('medication-reminders', {
+            name: '服薬リマインダー', importance: Notifications.AndroidImportance.HIGH,
+          });
+        }
         let permission = await Notifications.getPermissionsAsync();
         if (requestPermission && permission.canAskAgain && !permission.granted) {
           permission = await Notifications.requestPermissionsAsync({ ios: { allowAlert: true, allowSound: true, allowBadge: false } });
         }
         const allowed = permission.granted || permission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
         if (!allowed) {
-          setMessage(permission.canAskAgain ? '通知は未許可です。「通知を許可する」で有効にできます。' : '通知が許可されていません。iPhoneの設定で通知を許可してください。');
+          setMessage(permission.canAskAgain ? '通知は未許可です。「通知を許可する」で有効にできます。' : '通知が許可されていません。端末の設定で通知を許可してください。');
           return;
         }
         const current = latest.current;
@@ -47,7 +52,10 @@ export function ReminderProvider({ children }: PropsWithChildren) {
           list: Notifications.getAllScheduledNotificationsAsync,
           cancel: Notifications.cancelScheduledNotificationAsync,
           schedule: (request) => Notifications.scheduleNotificationAsync({
-            ...request, trigger: { ...request.trigger, type: Notifications.SchedulableTriggerInputTypes.DAILY },
+            ...request, trigger: {
+              ...request.trigger, type: Notifications.SchedulableTriggerInputTypes.DAILY,
+              ...(Platform.OS === 'android' ? { channelId: 'medication-reminders' } : {}),
+            },
           }),
         });
         const quiet = permission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;

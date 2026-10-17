@@ -49,7 +49,7 @@
 
 # のむペイ Development Build開発環境
 
-チームの標準は、**Expo Development Build（expo-dev-client）**です。各自のAndroid / iPhoneへ開発用アプリをインストールして使います。アプリの画面・ロジックは従来のままです。Expo Go用のQRではなく、このアプリ専用のDevelopment Buildを開いてください。
+チームの標準は、**Expo Development Build（expo-dev-client）**です。各自のAndroid / iPhoneへ開発用アプリをインストールして使います。服用確認はiOSでQR、Androidで薬箱のNFCタグを使います。Expo CLIが表示する起動用QRは両OSで使えます。Expo Goではなく、このアプリ専用のDevelopment Buildを開いてください。
 
 ## 採用構成と生成ファイル
 
@@ -61,6 +61,45 @@
 - `ios/`・`android/`はExpo Prebuild（CNG）で生成し、既存方針に従って**Gitへ追加しない**
 - ネイティブ設定はapp configとconfig pluginsで管理。生成されたソースを直接変更しない
 - 個人のApple Account、Team ID、証明書、プロビジョニングプロファイルを共有設定へ固定しない
+
+## OS別の服用確認
+
+| 項目 | iOS | Android |
+| --- | --- | --- |
+| 服用確認の入口 | ホームで薬を選んでQRを読み取り | 薬箱タグの登録・NFC読み取り |
+| NFCネイティブライブラリ | Autolinkingから除外 | react-native-nfc-manager 4.0.0 |
+| 通知 | 端末内のローカル通知 | 端末内のローカル通知 |
+| iOSのNFC・APNs署名権限 | 付けない | 対象外 |
+
+### Androidの薬箱タグ
+
+1. 「お薬」で、薬名・毎日の服用時刻・ペナルティ設定額を登録する。
+2. ホームの「薬箱タグを登録する」または設定の「薬箱タグ・NFC服用確認」を開く。
+3. 同じ薬箱に入っている薬を複数選び、「選んだ薬とタグを登録する」を押して、薬箱のNFCタグにスマホ背面を近づける。
+4. 「服薬リマインダー」で通知を許可する。Androidの設定の「アラームとリマインダー」も必要に応じて許可する。
+5. 通知時刻に薬を飲んだ後、通知から薬の詳細→NFC画面へ進むか、ホームからNFC画面を開き、「薬箱タグを読み取って服用確認」を押して同じタグを読む。
+
+- 端末ごとに**薬箱1つ・タグ1つ・複数の薬**を登録する。後からタグまたは薬の選択を更新できる。更新時は確認を表示し、過去の服用記録を残す。
+- タグの固定UIDを登録するため、NDEFテキスト等の書き込みは不要。固定UIDのあるNFCタグ（NTAG系等）を用意する。読み取るたびIDが変わるカードやスマホを薬箱タグとして使わない。
+- 読み取り時刻が、各薬の服用時刻以上・30分後の期限未満である予定だけを記録する。同時刻の薬や、猶予が重なる予定はまとめて記録し、未来の時刻は記録しない。深夜は前日の予定も期限内なら対象。
+- 初回のタグ登録では服用を記録しない。未登録・異なるタグ、期限外の読み取りは拒否する。同じ薬・予定日・時刻の二重記録はDBで防ぐ。
+- タグと薬の紐づけ、服用記録は端末内SQLiteに保存する。NFCの記録はQRと共通の服用履歴にも保存し、ホーム・履歴カレンダーへ反映する。再起動後も記録を確認できる。アプリの削除・データ消去で失われる。
+- 現在は実決済しないデモ。同じ薬・日付のQR・NFC服用記録があれば、課金デモと失敗履歴の再試行をスキップする。未読時の自動課金や、アプリ終了中のサーバー判定は未実装。
+- NFC非対応、NFCオフ、読み取り失敗を画面に表示する。中止・画面離脱・バックグラウンド移行時は読み取りを終了する。タグなしで服用済みにするボタンはAndroidには設けない。
+
+### iOSのデモ用署名
+
+`plugins/with-demo-platforms.js`で、生成iOSのNFC・APNs権限とremote-notificationバックグラウンド設定を除外する。ローカル通知とQRカメラは残す。このプラグインはSDK 57のmod実行順序に合わせ、`app.json`のpluginsの先頭に置く。
+
+NFCライブラリ自体も`package.json`の`expo.autolinking.ios.exclude`で除外し、iOSのQR画面からはimportしない。これらはAppleの無料Personal Teamで使わないCapabilityへの対処であり、Xcode・CocoaPodsの導入やApple Accountでの署名設定は引き続き必要。
+
+### カレンダーとの統合・保存データ
+
+- mainの今日の服薬予定、次の予定、時刻到来時の読み取り画面への遷移、履歴タブ・月カレンダーを維持する。iOSは薬ごとのQR確認結果を保存し、Androidは登録済み薬箱のNFCで対象の薬を記録する。
+- DBの服用履歴はバージョン4へ移行し、記録元としてQR・デモ・NFCを保存する。バージョン3のQR履歴・ID、薬登録、課金履歴を保持する。従来のNFC保存テーブルがあれば、その記録もカレンダーへ取り込む。
+- Androidのホームでは、30分の確認期限を過ぎた薬を表示しつつ、新しい対象時刻の予定を案内する。薬箱のタグを登録・変更する入口も残す。
+- 変更を反映したらアプリを完全に再起動する。移行後のDBは古いバージョンのアプリでは開けないため、古いmain版へ戻してデータ消去で対処しない。
+- 既存データを使った移行と実機でのQR/NFC→カレンダー反映は未検証。
 
 ## 初回セットアップ
 
@@ -113,13 +152,13 @@ SDK LocationはAndroid StudioのSDK Managerで確認してください。`SDK lo
 
 クラウドのEAS Build / TestFlightを前提にせず、**各メンバーのMacとXcodeでローカル署名・ビルド**します。この経路で通常の実機テストを行うための有料Apple Developer Program登録は不要です。
 
-1. 対応するXcode本体と必要なiOSサポートを導入する。Command Line Toolsだけではビルドできません。Xcodeを開いて初期設定を完了し、SettingsのCommand Line ToolsでそのXcodeを選びます。CocoaPodsも導入して`pod --version`を確認します（Expo Doctorの推奨は1.15.2以上）。Homebrewを利用している場合は`brew install cocoapods`で導入できます。
+1. SDK 57に対応するXcode 26.4以上と必要なiOSサポートを導入する。Command Line Toolsだけではビルドできません。Xcodeを開いて初期設定を完了し、SettingsのCommand Line ToolsでそのXcodeを選びます。CocoaPodsも導入して`pod --version`を確認します（Expo Doctorの推奨は1.15.2以上）。Homebrewを利用している場合は`brew install cocoapods`で導入できます。
 2. XcodeのSettings → Accountsで自分のApple Accountを追加し、Personal Teamを使える状態にする。
 3. iPhoneをUSB接続してMacを信頼し、端末で求められるDeveloper Modeを有効にする。
 4. 生成プロジェクトとPodsを準備する。
 
    ```sh
-   npm run prebuild:ios
+   npm run node24 -- npm run prebuild:ios
    open ios/*.xcworkspace
    ```
 
@@ -131,6 +170,10 @@ SDK LocationはAndroid StudioのSDK Managerで確認してください。`SDK lo
    ```
 
 `ios`は`expo run:ios --device`です。署名済みの開発証明書をCLIが認識できる場合は、初回からこのコマンドで生成・インストールできます。認識できない場合は先に上のXcodeでの署名設定を行ってください。Metroだけを起動する場合は別ターミナルで`npm start`を実行します。
+
+Xcodeから直接Runする場合もNode.js 24が必要です。Node 24ラッパー経由でPrebuildすると、config pluginがGit除外済み`ios/.xcode.env.local`にそのNode実行パスを記録します（存在するローカル設定は上書きしません）。Nodeのキャッシュを削除した場合はNode 24の再取得とPrebuildが必要です。
+
+PCなしで動かすiPhoneデモが必要な場合は、XcodeのEdit Scheme → Run → Build Configurationを**Release**にして、接続したiPhoneへRunします。JSをアプリ内に同梱します。署名は自分のPersonal Teamで行い、無料署名の7日期限はReleaseでも同じです。Debugは開発サーバーへの接続が必要です。
 
 ### Bundle Identifierが使用済みと表示される場合
 
@@ -153,8 +196,8 @@ IOS_BUNDLE_IDENTIFIER=jp.example.nomupay.dev
 - Personal Teamのプロビジョニングは7日で期限が切れるため、継続利用には再ビルド・再インストールが必要です。登録できるApp ID・端末・インストール数にも制限があります。
 - Personal Teamのビルドを他のメンバーへ配布して共通利用する運用にはしません。各自が自分の端末向けに署名します。
 - Appleの対応表では**NFC Tag Readingは無料のPersonal Teamでは利用できません**。将来iOSでNFCを実機検証する際は対応する有料のチーム署名等を別途検討してください。
-- AndroidにはPersonal Teamに相当する制約はありません。将来はNFC対応端末・ライブラリ・Android権限を追加して再ビルドします。
-- 今回はNFCライブラリ・NFC権限・NFC処理を追加していません。現在のカメラ・SQLite等の構成で開発を始めます。
+- AndroidはNFC対応端末で、今回追加したNFCライブラリと権限を含めて再ビルドします。
+- iOSはNFCを含めずQRを維持します。APNs Push権限も付けず、ローカル通知を使います。個別のTeam IDは共有設定に固定しません。
 
 [Apple公式：Personal Teamの実機テストと期限](https://developer.apple.com/help/account/basics/about-your-developer-account)
 
@@ -212,6 +255,8 @@ npm run ios
 Development BuildはExpo Goとは別アプリで、データ保存領域も別です。Expo Go内のSQLiteデータは新しい開発用アプリへ自動移行されません。また、アプリの削除やBundle Identifier / applicationId変更は保存データへ影響するため、必要な記録を残してから行ってください。同じIDのアプリを上書きビルドする通常の開発と区別します。
 
 実機ではホーム・既存の画面遷移・薬登録と再起動後の保存・QR許可と読み取り・ペナルティとデモ決済を確認してください。ブラウザでの表示やバンドル成功だけでは、これらの実機動作を確認したことにはしません。
+
+NFC追加後は、Androidで複数薬のタグ登録、未登録タグ拒否、時刻前・猶予内・期限後、同じ時刻の複数薬、再読み取り、再起動後の保存、通知からの遷移を確認してください。iOSはNFCモジュールと署名権限の除外を生成設定で確認済みですが、Personal Teamでの実機署名・インストールは未検証です。
 
 ## 確認コマンド
 
