@@ -9,7 +9,7 @@ export default function RemindersScreen() {
   return <MedicationScreen title="服薬リマインダー" description="いつもの時間に、おくすりのお知らせ。" backTo="/explore">
     <View style={styles.card}>
       <Text style={styles.heading}>毎日の服用時間に通知</Text>
-      <Text style={styles.text}>登録したお薬の名前と服用時刻を通知します。通知をタップすると、そのお薬の情報を確認できます。</Text>
+      <Text style={styles.text}>登録したお薬の名前と服用時刻を通知します。通知をタップすると、そのお薬の服用確認画面を直接開きます。</Text>
       <Text accessibilityLiveRegion="polite" style={styles.text}>{busy ? '通知を設定中…' : message}</Text>
       {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
       <Pressable accessibilityRole="button" disabled={busy} style={[styles.button, busy && styles.disabled]} onPress={() => void enable()}><Text style={styles.buttonText}>通知を許可する</Text></Pressable>

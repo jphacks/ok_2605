@@ -43,6 +43,15 @@ export async function initializeNfcDatabase(db: NfcDatabase): Promise<void> {
           confirmed_at TEXT NOT NULL,
           PRIMARY KEY (medication_id, scheduled_day, dose_time)
         );
+        CREATE TRIGGER IF NOT EXISTS nfc_auto_link_new_medication
+        AFTER INSERT ON medications
+        WHEN EXISTS (SELECT 1 FROM nfc_box WHERE id = 1)
+        BEGIN
+          INSERT OR IGNORE INTO nfc_box_medications (medication_id) VALUES (NEW.id);
+        END;
+        INSERT OR IGNORE INTO nfc_box_medications (medication_id)
+        SELECT id FROM medications
+        WHERE EXISTS (SELECT 1 FROM nfc_box WHERE id = 1);
       `);
     });
     initialization.set(db, work);
@@ -89,26 +98,21 @@ export function pendingNfcDoses(box: NfcBox | null, now: Date): NfcDose[] {
   }));
 }
 
-export async function saveNfcBox(db: NfcDatabase, tagId: string, medicationIds: number[], signal: AbortSignal): Promise<void> {
+export async function saveNfcBox(db: NfcDatabase, tagId: string, signal: AbortSignal): Promise<{ linkedMedicationCount: number }> {
   if (!/^(?:[0-9A-F]{2}){1,32}$/.test(tagId)) throw new Error('タグIDを読み取り直してください。');
-  const ids = [...new Set(medicationIds)];
-  if (!ids.length || ids.some((id) => !Number.isSafeInteger(id) || id <= 0)) {
-    throw new Error('薬箱に入れる薬を1件以上選んでください。');
-  }
   await initializeNfcDatabase(db);
+  let linkedMedicationCount = 0;
   await db.withExclusiveTransactionAsync(async (transaction) => {
     if (signal.aborted) throw new Error('登録を中止しました。');
-    for (const id of ids) {
-      if (!await transaction.getFirstAsync('SELECT id FROM medications WHERE id = ?', id)) {
-        throw new Error('選択した薬が見つかりません。登録内容を再読み込みしてください。');
-      }
-    }
     await transaction.runAsync(`INSERT INTO nfc_box (id, tag_uid, updated_at) VALUES (1, ?, ?)
       ON CONFLICT(id) DO UPDATE SET tag_uid = excluded.tag_uid, updated_at = excluded.updated_at`, tagId, new Date().toISOString());
     await transaction.runAsync('DELETE FROM nfc_box_medications');
-    for (const id of ids) await transaction.runAsync('INSERT INTO nfc_box_medications (medication_id) VALUES (?)', id);
+    await transaction.runAsync('INSERT INTO nfc_box_medications (medication_id) SELECT id FROM medications');
+    const count = await transaction.getFirstAsync<{ count: number }>('SELECT COUNT(*) AS count FROM nfc_box_medications');
+    linkedMedicationCount = count?.count ?? 0;
     if (signal.aborted) throw new Error('登録を中止しました。');
   });
+  return { linkedMedicationCount };
 }
 
 export async function confirmNfcDoses(db: NfcDatabase, tagId: string, signal: AbortSignal) {
@@ -134,6 +138,53 @@ export async function confirmNfcDoses(db: NfcDatabase, tagId: string, signal: Ab
     }
     if (signal.aborted) throw new Error('読み取りを中止しました。');
     result = { recorded, alreadyRecorded: doses.length - recorded, names: doses.map((dose) => dose.medication.name) };
+  });
+  return result;
+}
+
+export async function confirmNfcDose(
+  db: NfcDatabase,
+  tagId: string,
+  medicationId: number,
+  scheduledDay: string,
+  signal: AbortSignal,
+  now = new Date(),
+) {
+  if (!Number.isSafeInteger(medicationId) || medicationId <= 0) {
+    throw new Error('服用するお薬を確認できませんでした。ホームから選び直してください。');
+  }
+  await initializeNfcDatabase(db);
+  let result = { recorded: false, medicationName: '', confirmedAt: '' };
+  await db.withExclusiveTransactionAsync(async (transaction) => {
+    if (signal.aborted) throw new Error('読み取りを中止しました。');
+    const box = await readBox(transaction);
+    if (!box || tagId !== box.tagId) throw new Error('登録した薬箱のタグではありません。薬箱のタグを確認してください。');
+
+    const dose = pendingNfcDoses(box, now).find(
+      (candidate) => candidate.medication.id === medicationId && candidate.day === scheduledDay,
+    );
+    if (!dose) {
+      throw new Error('このお薬は現在、服用確認の対象ではありません。ホームで服用時刻を確認してください。');
+    }
+
+    const existing = await transaction.getFirstAsync<{ takenAt: string }>(
+      'SELECT taken_at AS takenAt FROM dose_records WHERE medication_id = ? AND scheduled_day = ?',
+      medicationId,
+      scheduledDay,
+    );
+    if (existing) {
+      result = { recorded: false, medicationName: dose.medication.name, confirmedAt: existing.takenAt };
+      return;
+    }
+
+    const confirmedAt = now.toISOString();
+    await transaction.runAsync(`INSERT INTO nfc_dose_confirmations
+      (medication_id, scheduled_day, dose_time, medication_name, tag_uid, confirmed_at)
+      VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(medication_id, scheduled_day, dose_time) DO NOTHING`,
+    dose.medication.id, dose.day, dose.medication.doseTime, dose.medication.name, tagId, confirmedAt);
+    await saveDoseRecord(transaction, dose.medication.id, dose.day, 'nfc', confirmedAt);
+    if (signal.aborted) throw new Error('読み取りを中止しました。');
+    result = { recorded: true, medicationName: dose.medication.name, confirmedAt };
   });
   return result;
 }
