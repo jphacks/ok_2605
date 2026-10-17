@@ -13,7 +13,7 @@ export function AppBottomNav({ disabled = false }: { disabled?: boolean }) {
   return (
     <View style={styles.nav}>
       {tabs.map((tab) => {
-        const selected = tab.href === '/medications' ? pathname.startsWith('/medications') : pathname === tab.href;
+        const selected = tab.href === '/medications' ? pathname.startsWith('/medications') : pathname === tab.href || (tab.href === '/explore' && pathname === '/payments');
         return (
           <Pressable
             key={tab.title}
