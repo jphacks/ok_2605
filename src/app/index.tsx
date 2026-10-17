@@ -1,7 +1,6 @@
-import { Link, router } from 'expo-router';
+import { router } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MedicationRegistrationCard } from '@/components/medication-registration-card';
 import { AppBottomNav } from '@/components/app-bottom-nav';
 import { useMedication } from '@/state/medication-context';
 
@@ -14,15 +13,12 @@ export default function HomeScreen() {
     <Text style={s.title}>{taken ? '今日も、よくできました！' : 'おはよう！\n薬の時間だよ。'}</Text>
     <View style={s.mascot}><Text style={s.bear}>🐻</Text><Text style={s.spark}>✦</Text></View>
     <Text style={s.helper}>“飲んで、今日もいい一日にしよう！”</Text>
-    <MedicationRegistrationCard />
     <View style={s.card}><Text style={s.label}>{taken ? '今日の服用（デモ）' : '服用予定（デモ）'}</Text><Text style={s.time}>09:00</Text><Text style={s.medicine}>朝のおくすり　/ 1錠</Text>
       <Pressable style={[s.primary, taken && s.disabled]} disabled={taken} onPress={() => router.push('/qr')}><Text style={s.primaryText}>{taken ? '✓ 服用を記録しました' : '▦  QRを読み取って服用確認'}</Text></Pressable>
       {!taken && <Pressable accessibilityRole="button" style={s.secondary} onPress={() => router.push('/missed')}><Text style={s.secondaryText}>飲めなかった場合（デモ）</Text></Pressable>}
     </View>
     <View style={s.heading}><Text style={s.sectionTitle}>今週の達成状況</Text><Text style={s.muted}>小さな一歩を、毎日。</Text></View>
     <View style={s.week}>{['月','火','水','木','金','土','日'].map((day, i) => <View key={day} style={s.day}><Text style={[s.dot, i < 3 && s.done, i === 3 && taken && s.done]}>{i < 3 || (i === 3 && taken) ? '✓' : '·'}</Text><Text style={s.muted}>{day}</Text></View>)}</View>
-    <View style={s.streak}><Text style={s.flame}>🔥</Text><View><Text style={s.muted}>連続達成</Text><Text style={s.streakText}>{taken ? 8 : 7}日目！</Text></View><Text style={[s.muted, { marginLeft: 'auto' }]}>いいペースだね</Text></View>
-    <Link href="/explore" style={s.secondary}>設定を開く</Link>
   </ScrollView><AppBottomNav /></SafeAreaView>;
 }
 
