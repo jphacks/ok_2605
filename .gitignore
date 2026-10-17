@@ -49,3 +49,6 @@ example
 # generated native folders
 /ios
 /android
+
+# Project-local npm cache
+.npm-cache/
