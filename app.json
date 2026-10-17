@@ -8,10 +8,12 @@
     "scheme": "expomedicationapp",
     "userInterfaceStyle": "light",
     "platforms": [
-      "ios"
+      "ios",
+      "android"
     ],
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "jp.jphacks.ok2605"
     },
     "android": {
       "adaptiveIcon": {
@@ -20,7 +22,8 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "jp.jphacks.ok2605"
     },
     "web": {
       "output": "server",
@@ -50,7 +53,13 @@
       "expo-status-bar",
       "expo-web-browser",
       "expo-sqlite",
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "expo-dev-client",
+        {
+          "launchMode": "launcher"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
