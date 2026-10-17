@@ -53,6 +53,7 @@
       "expo-status-bar",
       "expo-web-browser",
       "expo-sqlite",
+      "expo-notifications",
       [
         "expo-dev-client",
         {

@@ -11,6 +11,7 @@ export default function ExploreScreen() {
           ['/medications/new', '薬を登録する'],
           ['/qr', 'QR読み取り（デモ）'],
           ['/payments', 'ペナルティ課金（デモ）'],
+          ['/reminders', '服薬リマインダー'],
         ] as const).map(([href, label]) => (
           <Link key={href} href={href} asChild>
             <Pressable accessibilityRole="button" style={styles.row}>
@@ -19,7 +20,7 @@ export default function ExploreScreen() {
           </Link>
         ))}
       </View>
-      <Text style={styles.note}>通知・ご褒美の設定は今後追加します。</Text>
+      <Text style={styles.note}>ご褒美の設定は今後追加します。</Text>
     </MedicationScreen>
   );
 }
