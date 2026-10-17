@@ -10,7 +10,7 @@ export default function ExploreScreen() {
           ['/medications', 'お薬・服用スケジュール'],
           ['/medications/new', '薬を登録する'],
           ['/', 'ホーム・今日の服薬'],
-          ...(Platform.OS === 'android' ? [['/qr', '薬箱タグ・NFC服用確認']] as const : []),
+          ...(Platform.OS === 'android' ? [['/qr', '薬箱の設定・タグ変更']] as const : []),
           ['/payments', 'ペナルティ課金（デモ）'],
           ['/reminders', '服薬リマインダー'],
         ] as const).map(([href, label]) => (

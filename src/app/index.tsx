@@ -1,5 +1,5 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppState, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -22,25 +22,20 @@ export default function HomeScreen() {
   const router = useRouter();
   const { medications, isLoading: medicationsLoading, loadError: medicationsError } = useMedicationRegistry();
   const { day, records, isLoading: recordsLoading, loadError: recordsError, refresh } = useDoseRecords();
-  const { box, error: nfcError, reload: reloadNfc } = useNfcBox();
+  const { box, loading: nfcLoading, error: nfcError, reload: reloadNfc } = useNfcBox();
   const android = Platform.OS === 'android';
   const [now, setNow] = useState(() => new Date());
-  const autoOpened = useRef<string | null>(null);
-  const focused = useRef(false);
   const schedule = useMemo(() => buildDailySchedule(medications, records, now), [medications, records, now]);
   const actionableSchedule = useMemo(() => android
     ? schedule.filter((item) => item.status !== 'due' || now.getTime() < demoDeadline(localDay(now), item.medication.doseTime).getTime())
     : schedule, [android, schedule, now]);
   const next = useMemo(() => nextScheduledDose(actionableSchedule, medications, now), [actionableSchedule, medications, now]);
-  const due = actionableSchedule.find((item) => item.status === 'due');
   const takenCount = schedule.filter((item) => item.status === 'taken').length;
   const loading = medicationsLoading || recordsLoading;
   const hasError = !!medicationsError || !!recordsError;
 
   useFocusEffect(useCallback(() => {
-    focused.current = true;
     setNow(new Date());
-    return () => { focused.current = false; };
   }, []));
 
   useEffect(() => {
@@ -58,14 +53,6 @@ export default function HomeScreen() {
     };
   }, [refresh]);
 
-  useEffect(() => {
-    if (!focused.current || loading || hasError || !due || day !== localDay(now)) return;
-    const occurrence = `${day}:${due.medication.id}`;
-    if (autoOpened.current === occurrence) return;
-    autoOpened.current = occurrence;
-    router.push({ pathname: '/qr', params: { medicationId: String(due.medication.id), scheduledDay: day } });
-  }, [day, due, hasError, loading, now, router]);
-
   const openScanner = (medicationId: number) => {
     router.push({ pathname: '/qr', params: { medicationId: String(medicationId), scheduledDay: day } });
   };
@@ -82,12 +69,12 @@ export default function HomeScreen() {
         <Text style={styles.helper}>“飲んで、今日もいい一日にしよう！”</Text>
 
         <MedicationRegistryStatus />
-        {android && (
+        {android && !nfcLoading && !box && (
           <View style={styles.emptyCard}>
-            <Text style={styles.sectionTitle}>{box ? '薬箱タグ：登録済み' : '薬箱タグを登録してください'}</Text>
-            <Text style={styles.bodyText}>同じ薬箱のタグを、その時間のお薬の服用確認に使います。</Text>
+            <Text style={styles.sectionTitle}>最初に薬箱を登録しましょう</Text>
+            <Text style={styles.bodyText}>登録は最初の1回だけです。追加する薬はすべて、この薬箱へ自動で紐づきます。</Text>
             <Pressable accessibilityRole="button" style={styles.primary} onPress={() => router.push('/qr')}>
-              <Text style={styles.primaryText}>薬箱タグの登録・NFC服用確認</Text>
+              <Text style={styles.primaryText}>薬箱のNFCタグを登録する</Text>
             </Pressable>
             {!!nfcError && <><Text style={styles.errorText}>{nfcError}</Text><Pressable onPress={() => void reloadNfc()} style={styles.retry}><Text style={styles.retryText}>薬箱を再読み込み</Text></Pressable></>}
           </View>
@@ -119,8 +106,14 @@ export default function HomeScreen() {
             <Text style={styles.nextTime}>{next.medication.doseTime}</Text>
             <Text style={styles.nextName}>{next.medication.name}</Text>
             {next.due && (
-              <Pressable style={styles.primary} onPress={() => openScanner(next.medication.id)}>
-                <Text style={styles.primaryText}>{android ? '薬箱タグを読み取って服用確認' : '▦ QRを読み取って服用確認'}</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`${next.medication.name}の服用を記録する`}
+                accessibilityHint={android ? 'NFCタグの読み取り画面を開きます' : 'QRコードの読み取り画面を開きます'}
+                style={styles.primary}
+                onPress={() => openScanner(next.medication.id)}>
+                <Text style={styles.primaryText}>「{next.medication.name}」の服用を記録する</Text>
+                <Text style={styles.primarySubText}>{android ? 'NFCタグをタッチ' : 'QRコードを読み取る'}</Text>
               </Pressable>
             )}
           </View>
@@ -154,13 +147,29 @@ export default function HomeScreen() {
                     </View>
                     <Pressable
                       accessibilityRole="button"
+                      accessibilityLabel={isTaken
+                        ? `${item.medication.name}は服用記録済みです`
+                        : expired
+                          ? `${item.medication.name}の確認期限を過ぎました`
+                          : isDue
+                            ? `${item.medication.name}の服用を記録する`
+                            : `${item.medication.name}は${item.medication.doseTime}から記録できます`}
                       accessibilityState={{ disabled: isTaken || !canScan }}
                       disabled={isTaken || !canScan}
                       onPress={() => openScanner(item.medication.id)}
                       style={[styles.scanButton, (isTaken || !canScan) && styles.disabled]}>
                       <Text style={styles.scanButtonText}>
-                        {isTaken ? '✓ 服用を記録しました' : expired ? '確認期限を過ぎました' : isDue ? android ? '薬箱のNFCタグを読み取る' : 'QRを読み取る' : `${item.medication.doseTime}から読み取れます`}
+                        {isTaken
+                          ? `✓ 「${item.medication.name}」は服用記録済み`
+                          : expired
+                            ? `「${item.medication.name}」の確認期限を過ぎました`
+                            : isDue
+                              ? `「${item.medication.name}」の服用を記録する`
+                              : `${item.medication.doseTime}から「${item.medication.name}」を記録できます`}
                       </Text>
+                      {isDue && !isTaken && !expired && (
+                        <Text style={styles.scanButtonSubText}>{android ? 'NFCタグをタッチ' : 'QRコードを読み取る'}</Text>
+                      )}
                     </Pressable>
                   </View>
                 );
@@ -191,7 +200,8 @@ const styles = StyleSheet.create({
   nextTime: { fontSize: 38, fontWeight: '700', textAlign: 'center', color: C.ink, marginTop: 5 },
   nextName: { fontSize: 15, textAlign: 'center', color: C.ink, marginTop: 3 },
   primary: { backgroundColor: C.mint, borderRadius: 14, padding: 14, alignItems: 'center', marginTop: 18 },
-  primaryText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  primaryText: { color: '#fff', fontSize: 13, fontWeight: '700', textAlign: 'center' },
+  primarySubText: { color: '#eafffc', fontSize: 10, fontWeight: '600', marginTop: 4, textAlign: 'center' },
   emptyCard: { backgroundColor: '#fff', borderRadius: 20, padding: 22, borderWidth: 1, borderColor: C.line },
   bodyText: { color: C.muted, fontSize: 13, lineHeight: 22, marginTop: 8 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 26, marginBottom: 12 },
@@ -210,7 +220,8 @@ const styles = StyleSheet.create({
   statusText: { color: C.muted, fontSize: 11 },
   dueText: { color: C.coral },
   scanButton: { backgroundColor: C.mint, borderRadius: 12, padding: 12, alignItems: 'center', marginTop: 14 },
-  scanButtonText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  scanButtonText: { color: '#fff', fontSize: 12, fontWeight: '700', textAlign: 'center' },
+  scanButtonSubText: { color: '#eafffc', fontSize: 10, fontWeight: '600', marginTop: 4, textAlign: 'center' },
   disabled: { backgroundColor: '#a9bcb9' },
   errorBox: { backgroundColor: '#fff', borderRadius: 16, padding: 16, gap: 12, marginBottom: 16 },
   errorText: { color: '#aa353c', fontSize: 13 },

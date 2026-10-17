@@ -2,6 +2,7 @@ import * as Notifications from 'expo-notifications';
 import { router, useRootNavigationState } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type PropsWithChildren } from 'react';
 import { AppState, Platform } from 'react-native';
+import { localDay } from '@/features/medications/dose-record';
 import { reconcileReminders, reminderMedicationId } from '@/features/reminders/reminder-plan';
 import { useMedicationRegistry } from './medication-registry-context';
 
@@ -87,8 +88,16 @@ export function ReminderProvider({ children }: PropsWithChildren) {
     if (handled.current === key) return;
     const id = reminderMedicationId(notification.request.content.data);
     if (id === null) return;
+    // SDK 57 native responses use seconds on iOS and milliseconds on Android.
+    const receivedAt = new Date(Platform.OS === 'ios' ? notification.date * 1000 : notification.date);
     handled.current = key;
-    router.push({ pathname: '/medications/[id]', params: { id: String(id) } });
+    router.replace({
+      pathname: '/qr',
+      params: {
+        medicationId: String(id),
+        scheduledDay: localDay(receivedAt),
+      },
+    });
     Notifications.clearLastNotificationResponse();
   }, [response, navigation?.key]);
 
