@@ -1,3 +1,4 @@
+import { DEMO_PAYMENT_SCHEMA } from '../payments/demo-payment-schema.ts';
 import {
   MIN_PENALTY_AMOUNT,
   MedicationValidationError,
@@ -21,7 +22,7 @@ export interface MedicationDatabase {
 
 export async function initializeMedicationDatabase(db: MedicationDatabase): Promise<void> {
   const version = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
-  if ((version?.user_version ?? 0) > 1) {
+  if ((version?.user_version ?? 0) > 2) {
     throw new Error('このアプリより新しいデータベース形式です。');
   }
 
@@ -46,7 +47,6 @@ export async function initializeMedicationDatabase(db: MedicationDatabase): Prom
         ),
         created_at TEXT NOT NULL CHECK (length(created_at) > 0)
       );
-      PRAGMA user_version = 1;
     `);
     // Refresh write policy without rewriting previously registered amounts or rebuilding the table.
     // Only the application-owned numeric constant is interpolated; user input remains bound.
@@ -60,6 +60,8 @@ export async function initializeMedicationDatabase(db: MedicationDatabase): Prom
       WHEN NEW.penalty_amount < ${MIN_PENALTY_AMOUNT}
       BEGIN SELECT RAISE(ABORT, 'penalty amount below minimum'); END;
     `);
+    await db.execAsync(DEMO_PAYMENT_SCHEMA);
+    await db.execAsync('PRAGMA user_version = 2;');
     await db.execAsync('COMMIT;');
   } catch (error) {
     await db.execAsync('ROLLBACK;');

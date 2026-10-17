@@ -97,7 +97,7 @@ test('registered medicines survive a file database close and reopen and remain t
     database = createDatabase(file);
     await initializeMedicationDatabase(database.db);
     assert.deepEqual(await listMedications(database.db), [morning, sameTime, night]);
-    assert.deepEqual(await database.db.getFirstAsync('PRAGMA user_version'), { user_version: 1 });
+    assert.deepEqual(await database.db.getFirstAsync('PRAGMA user_version'), { user_version: 2 });
   } finally {
     database?.connection.close();
     await rm(directory, { recursive: true, force: true });
@@ -148,10 +148,10 @@ test('reinitializing preserves existing medicine data and newer schemas are left
   const medication = await saveMedication(db, validInput);
   await initializeMedicationDatabase(db);
   assert.deepEqual(await listMedications(db), [medication]);
-  await db.execAsync('PRAGMA user_version = 2;');
+  await db.execAsync('PRAGMA user_version = 3;');
   await assert.rejects(initializeMedicationDatabase(db), /新しいデータベース形式/);
   assert.deepEqual(await listMedications(db), [medication]);
-  assert.deepEqual(await db.getFirstAsync('PRAGMA user_version'), { user_version: 2 });
+  assert.deepEqual(await db.getFirstAsync('PRAGMA user_version'), { user_version: 3 });
 });
 
 test('repository validates independently and leaves no record after a failed insert', async (context) => {

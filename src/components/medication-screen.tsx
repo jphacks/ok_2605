@@ -17,7 +17,7 @@ export const medicationColors = {
 type MedicationScreenProps = PropsWithChildren<{
   title: string;
   description: string;
-  backTo?: '/' | '/medications';
+  backTo?: '/' | '/medications' | '/explore';
   busy?: boolean;
 }>;
 
