@@ -47,61 +47,189 @@
 * 特に力を入れた部分をファイルリンク、またはcommit_idを記載してください。
 
 
-# のむペイ Expo開発環境
+# のむペイ Development Build開発環境
 
-JPHACKS向けのReact Native + TypeScript + Expo（iOS）の開発用プロジェクトです。HTMLの画面検討は同じ`doc/demo/`内の`medication-ui`系を参照し、実装本体は将来`doc/App/ok_2605/`へ移します。
+チームの標準は、**Expo Development Build（expo-dev-client）**です。各自のAndroid / iPhoneへ開発用アプリをインストールして使います。アプリの画面・ロジックは従来のままです。Expo Go用のQRではなく、このアプリ専用のDevelopment Buildを開いてください。
 
-## 現在の画面
+## 採用構成と生成ファイル
 
-- `src/app/index.tsx`：くすり日和のホーム、服用予定、達成状況
-- `src/app/qr.tsx`：カメラ許可、QR読み取り、読み取り結果の確認アラート
-- `src/app/_layout.tsx`：Expo Routerのルートレイアウト
+- Expo SDK 57 / React Native 0.86.3 / TypeScript strict / Expo Router
+- Node.js **24.3.0以上の24系** / npm / package-lock.json（`.nvmrc`は24を指定）
+- iOS・Androidの両方を有効化。`expo-dev-client`はSDK対応版を`expo install`で導入
+- `app.json`が共有設定、`app.config.ts`はiOS Bundle Identifierのローカル上書きだけを担当
+- 共通のアプリID：iOS / Androidとも`jp.jphacks.ok2605`。Personal Teamで競合する場合の対応は後述
+- `ios/`・`android/`はExpo Prebuild（CNG）で生成し、既存方針に従って**Gitへ追加しない**
+- ネイティブ設定はapp configとconfig pluginsで管理。生成されたソースを直接変更しない
+- 個人のApple Account、Team ID、証明書、プロビジョニングプロファイルを共有設定へ固定しない
 
-## 起動
+## 初回セットアップ
 
-```bash
-cd doc/demo/expo-medication-app
-npm ci
+作業場所はこのREADMEがあるリポジトリのルート（現在は`doc/App/ok_2605/`）です。次の手順はPCの既定Node.jsが20系でも使えます。
+
+```sh
+cd /Users/ryusei/JPHACKS/doc/App/ok_2605
+npm run setup
+```
+
+`setup`はNode.js 24をnpm経由で取得し、その環境で`npm ci`を実行します。初回はネット接続が必要です。取得済みのNode.jsは専用キャッシュを優先して再利用します。`.npmrc`でキャッシュをGit除外済みの`.npm-cache/`へ向け、`~/.npm`の権限エラーを避けます。システムのNode.jsやホーム側キャッシュの権限を変更する必要はありません。
+
+`.nvmrc`を書くだけでは、現在のターミナルのNode.jsは切り替わりません。nvmを使うメンバーは`nvm install` → `nvm use`でも24系に合わせられます。Node.js 24環境なら通常の`npm ci`・`npm start`・`npm run android`・`npm run ios`も使えます。
+
+| 操作 | PCの既定Node.jsに依存しないコマンド |
+| --- | --- |
+| 初回・依存関係の同期 | `npm run setup` |
+| 開発サーバー | `npm run start:node24` |
+| Android実機ビルド | `npm run android:node24` |
+| iOS実機ビルド | `npm run ios:node24` |
+| 任意のコマンド（例：iOS再生成） | `npm run node24 -- npm run prebuild:ios` |
+
+Android / iOSのネイティブツール・署名の準備は、以下のOS別手順で行ってください。Node.js 24の取得だけではXcode・Android SDKはインストールされません。
+
+## Android：USB接続でビルド・インストール
+
+1. Android Studio、JDK 17、Android SDK / Build-Tools / Platform-Toolsを導入する。現在のReact Native 0.86.3が要求するAndroid SDK Platform 36・Build-Tools 36.0.0・NDK 27.1.12297006・CMake（現行の実機ビルドで使用する3.22.1）もSDK Managerで追加する。
+2. Android StudioのSDK Locationと`ANDROID_HOME`を合わせ、`$ANDROID_HOME/platform-tools`をPATHへ追加する。macOSの一般的な例：
+
+   ```sh
+   export ANDROID_HOME="$HOME/Library/Android/sdk"
+   export PATH="$PATH:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator"
+   ```
+
+SDK LocationはAndroid StudioのSDK Managerで確認してください。`SDK location not found`が表示された場合は、ビルドする**同じターミナル**で上記の`ANDROID_HOME`と`PATH`を設定し直してから再実行します。PCごとの`android/local.properties`の`sdk.dir`でも指定できますが、これはGit除外されるローカル環境設定であり、Prebuildの`--clean`で削除されます。共有ファイルには個人のSDK絶対パスを書きません。
+
+3. Android端末の開発者向けオプションとUSBデバッグを有効にし、USB接続時の許可ダイアログを承認する。
+4. 接続を確認してビルドする。
+
+   ```sh
+   adb devices
+   npm run android
+   ```
+
+`android`は`expo run:android --device`です。初回はAndroidプロジェクトを生成し、Debugビルドを作成・インストールしてMetroを起動します。既に別ターミナルでMetroを起動している場合は`npm run android -- --no-bundler`を使えます。`unauthorized`は端末側のUSBデバッグ許可を確認してください。
+
+以降は`npm start`で起動した開発サーバーへ、端末内の開発用アプリから接続します。同じLANに参加できない場合はUSB接続したまま、別ターミナルで`adb reverse tcp:8081 tcp:8081`を実行し、`npm start -- --localhost`を使えます。8081以外を選んだ場合はreverseするポートも合わせてください。
+
+## iOS：無料Apple Account（Personal Team）で実機ビルド
+
+クラウドのEAS Build / TestFlightを前提にせず、**各メンバーのMacとXcodeでローカル署名・ビルド**します。この経路で通常の実機テストを行うための有料Apple Developer Program登録は不要です。
+
+1. 対応するXcode本体と必要なiOSサポートを導入する。Command Line Toolsだけではビルドできません。Xcodeを開いて初期設定を完了し、SettingsのCommand Line ToolsでそのXcodeを選びます。CocoaPodsも導入して`pod --version`を確認します（Expo Doctorの推奨は1.15.2以上）。Homebrewを利用している場合は`brew install cocoapods`で導入できます。
+2. XcodeのSettings → Accountsで自分のApple Accountを追加し、Personal Teamを使える状態にする。
+3. iPhoneをUSB接続してMacを信頼し、端末で求められるDeveloper Modeを有効にする。
+4. 生成プロジェクトとPodsを準備する。
+
+   ```sh
+   npm run prebuild:ios
+   open ios/*.xcworkspace
+   ```
+
+5. Xcodeでアプリのターゲット → Signing & Capabilitiesを開き、Automatically manage signingを有効化して**自分のPersonal Team**を選ぶ。実行先を接続したiPhoneにしてRunする。端末で開発者の信頼を求められた場合は設定アプリから承認する。
+6. 以降のビルド・インストールは次でも実行できる。
+
+   ```sh
+   npm run ios
+   ```
+
+`ios`は`expo run:ios --device`です。署名済みの開発証明書をCLIが認識できる場合は、初回からこのコマンドで生成・インストールできます。認識できない場合は先に上のXcodeでの署名設定を行ってください。Metroだけを起動する場合は別ターミナルで`npm start`を実行します。
+
+### Bundle Identifierが使用済みと表示される場合
+
+Personal Teamごとの登録で共通IDが利用できない場合は、`.env.example`を`.env.local`へコピーし、**自分用の一意なID**を指定してください。
+
+```sh
+cp .env.example .env.local
+```
+
+`.env.local`の例（`example`部分は自分用に置き換える）：
+
+```dotenv
+IOS_BUNDLE_IDENTIFIER=jp.example.nomupay.dev
+```
+
+その後`npm run prebuild:ios`で再生成し、XcodeでPersonal Teamを再選択します。`.env.local`はGit除外済みです。これはアプリIDの指定であり、Apple Account・パスワード・Team IDは書きません。
+
+### Personal TeamとNFCの制限
+
+- Personal Teamのプロビジョニングは7日で期限が切れるため、継続利用には再ビルド・再インストールが必要です。登録できるApp ID・端末・インストール数にも制限があります。
+- Personal Teamのビルドを他のメンバーへ配布して共通利用する運用にはしません。各自が自分の端末向けに署名します。
+- Appleの対応表では**NFC Tag Readingは無料のPersonal Teamでは利用できません**。将来iOSでNFCを実機検証する際は対応する有料のチーム署名等を別途検討してください。
+- AndroidにはPersonal Teamに相当する制約はありません。将来はNFC対応端末・ライブラリ・Android権限を追加して再ビルドします。
+- 今回はNFCライブラリ・NFC権限・NFC処理を追加していません。現在のカメラ・SQLite等の構成で開発を始めます。
+
+[Apple公式：Personal Teamの実機テストと期限](https://developer.apple.com/help/account/basics/about-your-developer-account)
+
+[Apple公式：iOSの対応Capability](https://developer.apple.com/help/account/reference/supported-capabilities-ios)
+
+## 毎日の起動・Fast Refresh
+
+各OSのDevelopment Buildを一度端末にインストールした後：
+
+```sh
 npm start
 ```
 
-iOS Simulatorを起動する場合は`npm run ios`を使います。Xcode本体とSimulatorランタイムが必要です。QRカメラはiPhone実機で確認してください。SDK 57対応のExpo Go、または開発ビルドを使用します。Node.jsは24系（24.3.0以上）を使用します。
+標準コマンドは`expo start --dev-client`です。同じLANに接続した端末の開発用アプリでサーバーを選択するか、表示されたQRを読み取ります。LAN上のローカル開発ではExpo Goの同一アカウント認証は使いません。接続できないときはLAN・ファイアウォール・ローカルネットワーク権限を確認してください。
 
-## 使用パッケージ
+TypeScript / JavaScriptや画面のスタイルを保存すると、Fast Refreshで反映されます。状態が残るため画面上の動作も確認し、必要なら開発メニューからReloadしてください。Metroだけなら`npm start -- --clear`でキャッシュを更新できます。
 
-- Expo SDK 57
-- TypeScript
-- Expo Router
-- `expo-camera`（QRコードは`barcodeTypes: ['qr']`に限定）
-- 状態管理はReact `useReducer`とContext。QR画面からホームへ服用状態を共有します。
+`npm run web`は既存の補助コマンドとして維持しますが、カメラ・端末DBを含む今回の受け入れ確認はAndroid / iOS実機で行います。
 
-## ディレクトリ
+## Gitで変更を取得したメンバーが行うこと
 
-```text
-expo-medication-app/
-├── src/app/          # Expo Routerの画面とレイアウト
-├── src/components/   # テンプレートの共通UI部品
-├── src/state/        # デモQR検証・服用状態・Context
-├── src/types/        # CSSなどの型宣言
-├── tests/            # QR検証・二重記録防止のテスト
-├── assets/           # Expoのアイコン・スプラッシュ素材
-├── app.json          # Expo Router・カメラ権限の設定
-├── package.json
-└── tsconfig.json
+まず自分の未コミット変更を保護してから、チームの運用に従って変更を取得してください。この移行を初めて取得した場合は、全員が`npm ci`を実行し、自分のOSのDevelopment Buildをビルド・インストールします。
+
+| 取得した変更 | 必要な作業 |
+| --- | --- |
+| 初回・今回の移行 | `npm ci` → OS別の初回ビルド → `npm start` |
+| TS / JS・画面のスタイルのみ | 起動中ならFast Refresh、停止中なら`npm start` |
+| package.json / package-lock.json | `npm ci`。ネイティブ依存が変わった場合は再生成・再ビルド |
+| app.json / app.config.ts / config plugins・権限・アプリID・ネイティブ素材・SDKの変更 | 依存関係を同期して、対象OSのPrebuild・再ビルド |
+
+## ネイティブ変更時の再生成・再ビルド
+
+ネイティブライブラリの追加やSDK更新、plugin・権限・アプリID・ネイティブ設定の変更を行ったときは、対象OSの開発用アプリを作り直します。Metroの再起動だけでは反映されません。
+
+```sh
+# 新しいライブラリはExpo互換バージョンで追加
+npx expo install <package>
+
+# Android
+npm run prebuild:android
+npm run android
+
+# iOS
+npm run prebuild:ios
+# cleanでローカル署名設定も再生成されるため、必要ならXcodeでTeamを再選択
+npm run ios
 ```
 
-実機では、QRの中身が`nomupay:demo:morning`の場合だけ朝のお薬のデモ記録としてホームに反映します。QRを用意できない場合は「デモ：ボタンで読み取り完了」を押して同じ完了フローを確認できます。製品版QRの形式は未確定です。他のQRは拒否し、二重読み取りと二重記録を防ぎます。設定を拒否した場合もデモボタンは利用できます。
+`prebuild:android` / `prebuild:ios`は対象OSの`--clean`を実行し、その生成フォルダを削除・再作成します。両方のOSへ変更を反映するメンバーは両方で実行します。生成フォルダのソースへ行った直接編集は消えるので、必要な変更はapp config / config pluginとして管理してください。
 
-メモリ内の状態は再起動でリセットされます。服薬履歴、日付ごとのスケジュール、サーバー保存、決済、通知は未実装です。達成状況はサンプルです。既存テンプレートのWeb部品も残していますが、今回の対応対象はiOSです。
+## 既存データと実機での確認
 
-## 検証
+画面・画面遷移・服用状態・薬登録・SQLite・デモ決済処理など、`src/`と`tests/`の内容は今回変更しません。既存ライブラリは維持します。
 
-- `npm run typecheck`：画面・共通部品・フック・状態を含めて合格。
-- `npm run lint`：合格。
-- `npm test`：対象外QRの拒否、正しいQRの記録、二重記録防止の2テスト合格。
-- `npx expo install --check`：依存互換性確認に合格。
-- `npm run export:ios`：JSとアセットの生成に成功。署名済みiOSアプリのビルドではありません。
-- Simulator・実機カメラ・権限操作：未検証。現在のXcode選択先はCommand Line Toolsです。
-- `npm audit`：27件（high 19、moderate 8）。Expo/Metro等の推移依存を含み、SDKのダウングレードを伴う自動修正は未適用。
+Development BuildはExpo Goとは別アプリで、データ保存領域も別です。Expo Go内のSQLiteデータは新しい開発用アプリへ自動移行されません。また、アプリの削除やBundle Identifier / applicationId変更は保存データへ影響するため、必要な記録を残してから行ってください。同じIDのアプリを上書きビルドする通常の開発と区別します。
 
-pull・pushはユーザーが実施します。push版作成時は提出先を確認し、`node_modules`、`.expo`、`dist`、demo側の`.git`をコピー対象から除外します。
+実機ではホーム・既存の画面遷移・薬登録と再起動後の保存・QR許可と読み取り・ペナルティとデモ決済を確認してください。ブラウザでの表示やバンドル成功だけでは、これらの実機動作を確認したことにはしません。
+
+## 確認コマンド
+
+```sh
+npm run typecheck
+npm run lint
+npm test
+npm run check:dependencies
+npm run export:ios
+npm run export:android
+npx expo config --type introspect
+```
+
+`expo export`はJS・アセットのバンドル確認です。Xcode / Gradleによるネイティブビルド・署名・実機インストールとは別です。
+
+## 公式資料
+
+- [Expo SDK 57 DevClient](https://docs.expo.dev/versions/v57.0.0/sdk/dev-client/)
+- [Expo：ローカル開発ビルド](https://docs.expo.dev/guides/local-app-development/)
+- [Expo：Development Buildの使い方と再ビルド](https://docs.expo.dev/develop/development-builds/use-development-builds/)
+- [Expo：Continuous Native Generation](https://docs.expo.dev/workflow/continuous-native-generation/)

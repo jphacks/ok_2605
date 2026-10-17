@@ -7,6 +7,7 @@
     "expo": "~57.0.0",
     "expo-camera": "~57.0.6",
     "expo-constants": "~57.0.22",
+    "expo-dev-client": "~57.0.20",
     "expo-device": "~57.0.2",
     "expo-font": "~57.0.4",
     "expo-glass-effect": "~57.0.4",
@@ -36,14 +37,23 @@
     "typescript": "~6.0.3"
   },
   "scripts": {
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "start": "expo start --dev-client",
+    "android": "expo run:android --device",
+    "ios": "expo run:ios --device",
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.cjs",
-    "export:ios": "expo export --platform ios"
+    "export:ios": "expo export --platform ios",
+    "prebuild:android": "expo prebuild --platform android --clean",
+    "prebuild:ios": "expo prebuild --platform ios --clean",
+    "export:android": "expo export --platform android",
+    "check:dependencies": "expo install --check",
+    "node24": "npm exec --yes --prefer-offline --package=node@24 --",
+    "setup": "npm run node24 -- npm ci",
+    "start:node24": "npm run node24 -- npm start",
+    "android:node24": "npm run node24 -- npm run android",
+    "ios:node24": "npm run node24 -- npm run ios"
   },
   "engines": {
     "node": ">=24.3.0 <25"
