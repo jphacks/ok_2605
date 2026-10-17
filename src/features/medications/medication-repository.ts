@@ -1,4 +1,5 @@
 import { DEMO_PAYMENT_SCHEMA } from '../payments/demo-payment-schema.ts';
+import { initializeDoseRecordSchema } from './dose-record-schema.ts';
 import {
   MIN_PENALTY_AMOUNT,
   MedicationValidationError,
@@ -22,7 +23,7 @@ export interface MedicationDatabase {
 
 export async function initializeMedicationDatabase(db: MedicationDatabase): Promise<void> {
   const version = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
-  if ((version?.user_version ?? 0) > 3) {
+  if ((version?.user_version ?? 0) > 4) {
     throw new Error('このアプリより新しいデータベース形式です。');
   }
 
@@ -61,21 +62,8 @@ export async function initializeMedicationDatabase(db: MedicationDatabase): Prom
       BEGIN SELECT RAISE(ABORT, 'penalty amount below minimum'); END;
     `);
     await db.execAsync(DEMO_PAYMENT_SCHEMA);
-    await db.execAsync(`
-      CREATE TABLE IF NOT EXISTS dose_records (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        medication_id INTEGER NOT NULL REFERENCES medications(id),
-        scheduled_day TEXT NOT NULL CHECK (
-          length(scheduled_day) = 10
-          AND scheduled_day GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'
-        ),
-        taken_at TEXT NOT NULL CHECK (length(taken_at) > 0),
-        source TEXT NOT NULL CHECK (source IN ('qr', 'demo')),
-        UNIQUE (medication_id, scheduled_day)
-      );
-      CREATE INDEX IF NOT EXISTS dose_records_day ON dose_records(scheduled_day, medication_id);
-    `);
-    await db.execAsync('PRAGMA user_version = 3;');
+    await initializeDoseRecordSchema(db, version?.user_version ?? 0);
+    await db.execAsync('PRAGMA user_version = 4;');
     await db.execAsync('COMMIT;');
   } catch (error) {
     await db.execAsync('ROLLBACK;');

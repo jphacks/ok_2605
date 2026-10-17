@@ -1,5 +1,5 @@
-import { useLocalSearchParams } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { Link, useLocalSearchParams } from 'expo-router';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import { MedicationScreen, medicationColors as C } from '@/components/medication-screen';
 import { MedicationRegistryStatus } from '@/components/medication-registry-status';
 import { useMedicationRegistry } from '@/state/medication-registry-context';
@@ -15,6 +15,7 @@ export default function MedicationDetailScreen() {
       <Text style={styles.name}>{medication.name}</Text>
       <Text style={styles.note}>ペナルティ設定額：{medication.penaltyAmount.toLocaleString('ja-JP')}円</Text>
       <Text style={styles.note}>この画面を開くだけでは服用済みになりません。</Text>
+      {Platform.OS === 'android' && <Link href="/qr" style={styles.time}>薬箱のNFCタグで服用を確認する</Link>}
     </View> : <Text style={styles.note}>このお薬は見つかりません。お薬一覧で登録内容をご確認ください。</Text>)}
   </MedicationScreen>;
 }

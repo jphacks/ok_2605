@@ -1,5 +1,6 @@
 import { MIN_PENALTY_AMOUNT, type Medication } from '../medications/medication.ts';
 import type { MedicationDatabase } from '../medications/medication-repository.ts';
+import { hasDoseRecord } from '../medications/dose-record-repository.ts';
 import {
   DemoPaymentInputError, demoDeadline, isPenaltyDue, simulatePayment,
   type DemoOutcome, type DemoPayment, type DemoPaymentAttempt, type DemoPaymentRequest, type DemoPaymentResult,
@@ -66,7 +67,8 @@ export async function runDemoPayment(db: DemoPaymentDatabase, request: DemoPayme
       penalty_amount AS penaltyAmount, created_at AS createdAt FROM medications WHERE id = ?`, request.medicationId);
     if (!medication) throw new DemoPaymentInputError('薬が見つかりません。登録した薬を選び直してください。');
     const deadline = demoDeadline(request.day, medication.doseTime);
-    const taken = request.scenario === 'taken';
+    const taken = request.scenario === 'taken'
+      || await hasDoseRecord(transaction, medication.id, request.day);
     const simulatedNow = new Date(deadline.getTime() + (request.scenario === 'within-grace' ? -1 : 1));
     if (!isPenaltyDue(taken, simulatedNow, deadline)) {
       return { kind: 'skipped', reason: taken ? 'taken' : 'within-grace' };
@@ -99,6 +101,9 @@ export async function retryDemoPayment(db: DemoPaymentDatabase, paymentId: numbe
   return exclusive(db, async (transaction) => {
     const payment = await transaction.getFirstAsync<DemoPayment>(`SELECT ${columns} FROM demo_penalty_payments WHERE id = ?`, paymentId);
     if (!payment) throw new DemoPaymentInputError('課金履歴が見つかりません。');
+    if (await hasDoseRecord(transaction, payment.medicationId, payment.scheduledDay)) {
+      return { kind: 'skipped', reason: 'taken' };
+    }
     return settle(transaction, payment, outcome);
   });
 }

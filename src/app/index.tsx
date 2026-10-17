@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AppState, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppBottomNav } from '@/components/app-bottom-nav';
@@ -8,6 +8,8 @@ import { MedicationRegistryStatus } from '@/components/medication-registry-statu
 import { buildDailySchedule, localDay, nextScheduledDose } from '@/features/medications/dose-record';
 import { useDoseRecords } from '@/state/dose-record-context';
 import { useMedicationRegistry } from '@/state/medication-registry-context';
+import { useNfcBox } from '@/state/nfc-box-context';
+import { demoDeadline } from '@/features/payments/demo-payment';
 
 const C = { ink: '#263e48', muted: '#72848a', mint: '#36b7aa', pale: '#eef9fa', line: '#e5eeed', coral: '#e77760' };
 
@@ -20,12 +22,17 @@ export default function HomeScreen() {
   const router = useRouter();
   const { medications, isLoading: medicationsLoading, loadError: medicationsError } = useMedicationRegistry();
   const { day, records, isLoading: recordsLoading, loadError: recordsError, refresh } = useDoseRecords();
+  const { box, error: nfcError, reload: reloadNfc } = useNfcBox();
+  const android = Platform.OS === 'android';
   const [now, setNow] = useState(() => new Date());
   const autoOpened = useRef<string | null>(null);
   const focused = useRef(false);
   const schedule = useMemo(() => buildDailySchedule(medications, records, now), [medications, records, now]);
-  const next = useMemo(() => nextScheduledDose(schedule, medications, now), [schedule, medications, now]);
-  const due = schedule.find((item) => item.status === 'due');
+  const actionableSchedule = useMemo(() => android
+    ? schedule.filter((item) => item.status !== 'due' || now.getTime() < demoDeadline(localDay(now), item.medication.doseTime).getTime())
+    : schedule, [android, schedule, now]);
+  const next = useMemo(() => nextScheduledDose(actionableSchedule, medications, now), [actionableSchedule, medications, now]);
+  const due = actionableSchedule.find((item) => item.status === 'due');
   const takenCount = schedule.filter((item) => item.status === 'taken').length;
   const loading = medicationsLoading || recordsLoading;
   const hasError = !!medicationsError || !!recordsError;
@@ -75,6 +82,16 @@ export default function HomeScreen() {
         <Text style={styles.helper}>“飲んで、今日もいい一日にしよう！”</Text>
 
         <MedicationRegistryStatus />
+        {android && (
+          <View style={styles.emptyCard}>
+            <Text style={styles.sectionTitle}>{box ? '薬箱タグ：登録済み' : '薬箱タグを登録してください'}</Text>
+            <Text style={styles.bodyText}>同じ薬箱のタグを、その時間のお薬の服用確認に使います。</Text>
+            <Pressable accessibilityRole="button" style={styles.primary} onPress={() => router.push('/qr')}>
+              <Text style={styles.primaryText}>薬箱タグの登録・NFC服用確認</Text>
+            </Pressable>
+            {!!nfcError && <><Text style={styles.errorText}>{nfcError}</Text><Pressable onPress={() => void reloadNfc()} style={styles.retry}><Text style={styles.retryText}>薬箱を再読み込み</Text></Pressable></>}
+          </View>
+        )}
         {recordsError && (
           <View style={styles.errorBox}>
             <Text accessibilityRole="alert" style={styles.errorText}>{recordsError}</Text>
@@ -103,7 +120,7 @@ export default function HomeScreen() {
             <Text style={styles.nextName}>{next.medication.name}</Text>
             {next.due && (
               <Pressable style={styles.primary} onPress={() => openScanner(next.medication.id)}>
-                <Text style={styles.primaryText}>▦ QRを読み取って服用確認</Text>
+                <Text style={styles.primaryText}>{android ? '薬箱タグを読み取って服用確認' : '▦ QRを読み取って服用確認'}</Text>
               </Pressable>
             )}
           </View>
@@ -119,6 +136,8 @@ export default function HomeScreen() {
               {schedule.map((item) => {
                 const isTaken = item.status === 'taken';
                 const isDue = item.status === 'due';
+                const expired = android && isDue && now.getTime() >= demoDeadline(day, item.medication.doseTime).getTime();
+                const canScan = isDue && !expired;
                 return (
                   <View key={item.medication.id} style={styles.medicationCard}>
                     <View style={styles.medicationRow}>
@@ -130,17 +149,17 @@ export default function HomeScreen() {
                         <Text style={styles.medicationName}>{item.medication.name}</Text>
                       </View>
                       <Text style={[styles.statusText, isDue && styles.dueText]}>
-                        {isTaken ? '服用済み' : isDue ? '服用時間です' : '予定'}
+                        {isTaken ? '服用済み' : expired ? '確認期限終了' : isDue ? '服用時間です' : '予定'}
                       </Text>
                     </View>
                     <Pressable
                       accessibilityRole="button"
-                      accessibilityState={{ disabled: isTaken || !isDue }}
-                      disabled={isTaken || !isDue}
+                      accessibilityState={{ disabled: isTaken || !canScan }}
+                      disabled={isTaken || !canScan}
                       onPress={() => openScanner(item.medication.id)}
-                      style={[styles.scanButton, (isTaken || !isDue) && styles.disabled]}>
+                      style={[styles.scanButton, (isTaken || !canScan) && styles.disabled]}>
                       <Text style={styles.scanButtonText}>
-                        {isTaken ? '✓ 服用を記録しました' : isDue ? 'QRを読み取る' : `${item.medication.doseTime}から読み取れます`}
+                        {isTaken ? '✓ 服用を記録しました' : expired ? '確認期限を過ぎました' : isDue ? android ? '薬箱のNFCタグを読み取る' : 'QRを読み取る' : `${item.medication.doseTime}から読み取れます`}
                       </Text>
                     </Pressable>
                   </View>

@@ -4,6 +4,11 @@ import { isLocalDay, type DoseRecord, type DoseRecordSource } from './dose-recor
 const columns = `id, medication_id AS medicationId, scheduled_day AS scheduledDay,
   taken_at AS takenAt, source`;
 
+export async function hasDoseRecord(db: MedicationDatabase, medicationId: number, day: string): Promise<boolean> {
+  if (!isLocalDay(day)) throw new Error('服薬記録の日付が正しくありません。');
+  return !!await db.getFirstAsync('SELECT id FROM dose_records WHERE medication_id = ? AND scheduled_day = ?', medicationId, day);
+}
+
 export async function listDoseRecordsForDay(db: MedicationDatabase, day: string): Promise<DoseRecord[]> {
   if (!isLocalDay(day)) throw new Error('服薬記録の日付が正しくありません。');
   return db.getAllAsync<DoseRecord>(
@@ -38,7 +43,7 @@ export async function saveDoseRecord(
 ): Promise<DoseRecord> {
   if (!Number.isSafeInteger(medicationId) || medicationId <= 0) throw new Error('服薬する薬を選択してください。');
   if (!isLocalDay(day)) throw new Error('服薬記録の日付が正しくありません。');
-  if (source !== 'qr' && source !== 'demo') throw new Error('服薬記録の方法が正しくありません。');
+  if (source !== 'qr' && source !== 'demo' && source !== 'nfc') throw new Error('服薬記録の方法が正しくありません。');
   if (!Number.isFinite(Date.parse(takenAt))) throw new Error('服薬日時が正しくありません。');
 
   const medication = await db.getFirstAsync<{ id: number }>('SELECT id FROM medications WHERE id = ?', medicationId);

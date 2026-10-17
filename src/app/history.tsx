@@ -139,7 +139,7 @@ export default function HistoryScreen() {
                   <Text style={styles.medicationName}>{medication.name}</Text>
                 </View>
                 <Text style={[styles.recordStatus, (missed || dueToday) && styles.missed]}>
-                  {record ? `服用 ${formatTakenTime(record.takenAt)}` : missed || dueToday ? '未服用' : '予定'}
+                  {record ? `服用 ${formatTakenTime(record.takenAt)}${record.source === 'nfc' ? '（NFC）' : ''}` : missed || dueToday ? '未服用' : '予定'}
                 </Text>
               </View>
             );
