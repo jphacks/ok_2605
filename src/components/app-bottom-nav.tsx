@@ -1,14 +1,15 @@
 import { router, useFocusEffect, usePathname } from 'expo-router';
+import { Image } from 'expo-image';
 import { createContext, useCallback, useContext, useEffect, useState, type PropsWithChildren } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const tabs = [
-  { title: 'ホーム', icon: '⌂', href: '/' },
-  { title: '履歴', icon: '▥', href: '/history' },
-  { title: 'お薬', icon: '▤', href: '/medications' },
-  { title: '薬箱', icon: '▣', href: '/boxes' },
-  { title: '設定', icon: '⚙', href: '/explore' },
+  { title: 'ホーム', icon: require('../../assets/images/navigation/home.png'), href: '/' },
+  { title: '履歴', icon: require('../../assets/images/navigation/calendar.png'), href: '/history' },
+  { title: 'お薬', icon: require('../../assets/images/navigation/medicine.png'), href: '/medications' },
+  { title: '薬箱', icon: require('../../assets/images/navigation/medicine-box.png'), href: '/boxes' },
+  { title: '設定', icon: require('../../assets/images/navigation/settings.png'), href: '/explore' },
 ] as const;
 
 type TabHref = typeof tabs[number]['href'];
@@ -73,7 +74,7 @@ export function FixedBottomNav() {
             disabled={disabled}
             onPress={() => navigate(tab.href)}
             style={[styles.tab, selected && styles.selected]}>
-            <Text style={[styles.icon, selected && styles.active]}>{tab.icon}</Text>
+            <Image source={tab.icon} contentFit="contain" style={[styles.icon, !selected && styles.iconInactive]} />
             <Text style={[styles.label, selected && styles.active]}>{tab.title}</Text>
           </Pressable>
         );
@@ -88,7 +89,8 @@ const styles = StyleSheet.create({
   nav: { flexDirection: 'row', backgroundColor: '#fffdfa', borderTopWidth: 1, borderTopColor: '#f2e4e4', paddingHorizontal: 8, paddingTop: 7, paddingBottom: 3, minHeight: 69 },
   tab: { flex: 1, minHeight: 52, alignItems: 'center', justifyContent: 'center', gap: 4, borderRadius: 10 },
   selected: { backgroundColor: '#fff0f2' },
-  icon: { color: '#8b999d', fontSize: 22 },
+  icon: { width: 25, height: 25 },
+  iconInactive: { opacity: 0.48 },
   label: { color: '#8b999d', fontSize: 9 },
   active: { color: '#f56889' },
 });
