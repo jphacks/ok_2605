@@ -57,7 +57,10 @@
     "setup": "npm run node24 -- npm ci",
     "start:node24": "npm run node24 -- npm start",
     "android:node24": "npm run node24 -- npm run android",
-    "ios:node24": "npm run node24 -- npm run ios"
+    "ios:node24": "npm run node24 -- npm run ios",
+    "apk:credentials": "npm run node24 -- node scripts/android-credentials.cjs",
+    "apk:build": "npm run node24 -- node scripts/build-android-apk.cjs",
+    "apk:eas": "npm run node24 -- npm exec --yes --package=eas-cli@latest -- eas build --platform android --profile preview"
   },
   "engines": {
     "node": ">=24.3.0 <25"

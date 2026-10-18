@@ -163,7 +163,7 @@ NFCライブラリ自体も`package.json`の`expo.autolinking.ios.exclude`で除
 作業場所はこのREADMEがあるリポジトリのルート（現在は`doc/App/ok_2605/`）です。次の手順はPCの既定Node.jsが20系でも使えます。
 
 ```sh
-cd /Users/ryusei/JPHACKS/doc/App/ok_2605
+cd /ok_2605
 npm run setup
 ```
 
@@ -329,12 +329,78 @@ npx expo config --type introspect
 
 `expo export`はJS・アセットのバンドル確認です。Xcode / Gradleによるネイティブビルド・署名・実機インストールとは別です。
 
+## Androidの配布用APK（開発用ビルドと併用）
+
+iOSはこれまでのXcode・QRデモを継続します。Androidは用途に応じて作り分けます。
+
+| 用途 | アプリ名・識別子 | 起動 |
+| --- | --- | --- |
+| 開発・Fast Refresh | のむペイ / `jp.jphacks.ok2605` | 従来どおり `npm run start:node24` |
+| APK配布・PCなし | のむペイ（配布版）/ `jp.jphacks.ok2605.preview` | インストール後、アイコンから単独起動 |
+
+2つは同時にインストールでき、アプリデータはそれぞれ独立します。配布版では初回の薬箱・NFC・ダミーカード登録から始まります。NFC・ローカル通知・QRとNFCのOS別分離・テスト決済の仕様は維持します。配布版の課金もダミーで、実際の請求はありません。
+
+開発版・配布版とも、設定から「デモ：ペナルティ発生画面」と「開発用・決済シミュレーター」を開けます。ペナルティ画面のデモは表示のみ、決済シミュレーターは端末内のデモ決済履歴を保存します。実際の請求はありません。初回登録完了後に利用してください。
+
+### 自分のMacで無料でAPKを作る
+
+Android SDK・NDKとJDKが必要です。現在のAndroid開発環境を利用できます。macOS標準のSDK場所を自動検出し、異なる場所は`ANDROID_HOME`で指定してください。
+
+```bash
+cd /Users/ryusei/JPHACKS/doc/App/ok_2605
+npm run setup
+
+# 初回のみ、配布担当者が作成する（既存の鍵があれば再利用）
+npm run apk:credentials
+
+# 通常のAPK作成。開発サーバー・Expoログインは不要
+npm run apk:build
+```
+
+完成ファイルは **`dist/nomupay-android.apk`** です。このAPKだけを受け取る人に渡してください。端末でファイルを開き、必要に応じてそのブラウザー／ファイル管理アプリの「不明なアプリのインストール」を許可するとインストールできます。USB・Expo Go・開発サーバーは起動時に不要です。
+
+配布用のネイティブ生成・GradleキャッシュはGit対象外の`build/`内で実行します。普段使っているルートの`android/`・`ios/`を再生成しないため、通常の `npm run android:node24` / `npm run ios:node24` と併用できます。ローカルAPKは一般的な実機向けの **ARM64（arm64-v8a）** を標準とし、CPU負荷を抑えてビルドします。ASUS_AI2202はこの対象です。
+
+32bit端末やエミュレーターも含める場合は、十分な空き容量を確保した上でCPU形式を指定してください。EASのpreviewは通常の全ABIでビルドします。
+
+```bash
+ANDROID_ABIS=armeabi-v7a,arm64-v8a,x86,x86_64 npm run apk:build
+```
+
+### 署名鍵の保管と更新
+
+- `credentials.json`と`.android-signing/`は配布担当者が安全な場所へバックアップしてください。パスワードは`credentials.json`に保存され、画面やビルドログへ出力しません。
+- Gitには鍵・パスワード・APK・生成ディレクトリを追加しません。相手に渡すのは署名済みAPKだけです。
+- 他メンバーが既存の配布アプリを更新する場合は、担当者から安全な方法で同じ鍵と`credentials.json`を引き継いでください。cloneだけで新しい鍵を作ると、既存の配布版を上書き更新できません。
+- 更新時は同じパッケージ名・署名鍵を使い、`app.json`の`expo.version`と`expo.android.versionCode`を更新して再ビルドします（未指定のversionCodeは1）。初回配布後は鍵を作り直さないでください。
+- JavaScriptの変更を配布版へ反映する際も、APKを再作成して配布します。開発版は引き続きFast Refreshを使えます。
+
+### EAS Buildも使う場合
+
+`eas.json`に開発用`development`と、開発サーバー不要のAPK用`preview`を用意しています。クラウドビルドにはExpoアカウント・プロジェクトの紐づけと、無料枠または契約枠が必要です。
+
+```bash
+npm run node24 -- npm exec --yes --package=eas-cli@latest -- eas login
+npm run node24 -- npm exec --yes --package=eas-cli@latest -- eas init
+npm run apk:eas
+```
+
+`preview`は`credentialsSource: local`で同じ署名鍵を使い、`APP_VARIANT=preview`で配布用の名前・識別子を選びます。iOSのクラウド配布設定は追加していません。EASへのログイン・プロジェクト作成・アップロードは必要な場合に担当者が実行してください。
+
+配布前には、PCを使わない起動、NFC登録・服用確認、通知権限と服用通知、履歴、再起動後の保存、テスト課金を実機で確認してください。
+
+今回のローカルARM64 Releaseビルド、APK署名・配布用識別子・非debuggable・JavaScript内包、型チェック・Lint、iOSのバンドル生成は確認済みです。実機へのインストール・NFC・通知・PCなし起動、EASクラウドでの作成は未検証です。
+
 ## 公式資料
 
 - [Expo SDK 57 DevClient](https://docs.expo.dev/versions/v57.0.0/sdk/dev-client/)
 - [Expo：ローカル開発ビルド](https://docs.expo.dev/guides/local-app-development/)
 - [Expo：Development Buildの使い方と再ビルド](https://docs.expo.dev/develop/development-builds/use-development-builds/)
 - [Expo：Continuous Native Generation](https://docs.expo.dev/workflow/continuous-native-generation/)
+- [Expo：Android APK](https://docs.expo.dev/build-reference/apk/)
+- [Expo：ローカルのリリースビルド](https://docs.expo.dev/guides/local-app-production/)
+- [Expo：同じ端末で複数のアプリを使う](https://docs.expo.dev/build-reference/variants/)
+- [Expo：ローカル署名情報](https://docs.expo.dev/app-signing/local-credentials/)
 
 ## 服薬・飲み忘れのフロー（2026-10追加）
 
