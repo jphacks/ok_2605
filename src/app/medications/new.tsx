@@ -3,10 +3,12 @@ import { useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Keyboard, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { DateCalendarModal } from '@/components/date-calendar-modal';
+import { GracePeriodPicker } from '@/components/grace-period-picker';
 import { MedicationRegistryStatus } from '@/components/medication-registry-status';
 import { MedicationScreen, medicationColors as C } from '@/components/medication-screen';
 import { TimeDropdown } from '@/components/time-dropdown';
 import { localDay, scheduledDate } from '@/features/medications/dose-record';
+import { DEFAULT_GRACE_MINUTES } from '@/features/medications/grace-period';
 import { MIN_PENALTY_AMOUNT, MedicationValidationError, type MedicationFieldErrors } from '@/features/medications/medication';
 import { useMedicationRegistry } from '@/state/medication-registry-context';
 import { MedicineBoxPicker } from '@/components/medicine-box-picker';
@@ -50,6 +52,7 @@ export default function NewMedicationScreen() {
   const [inventory, setInventory] = useState('');
   const [memo, setMemo] = useState('');
   const [penaltyAmount, setPenaltyAmount] = useState(String(MIN_PENALTY_AMOUNT));
+  const [graceMinutes, setGraceMinutes] = useState(DEFAULT_GRACE_MINUTES);
   const [errors, setErrors] = useState<MedicationFieldErrors>({});
   const [formError, setFormError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -94,6 +97,7 @@ export default function NewMedicationScreen() {
         unit: UNITS[unitIndex],
         inventory,
         memo,
+        graceMinutes,
       });
       router.dismissTo({ pathname: '/medications', params: { registered: String(saved[0].id) } });
     } catch (error) {
@@ -285,6 +289,12 @@ export default function NewMedicationScreen() {
           </View>
           <Text style={styles.hint}>{MIN_PENALTY_AMOUNT}円以上の整数を入力してください。</Text>
           {!!errors.penaltyAmount && <Text accessibilityRole="alert" style={styles.error}>{errors.penaltyAmount}</Text>}
+        </View>
+
+        <View style={styles.field}>
+          <Text style={styles.label}>執行猶予時間 <Text style={styles.required}>必須</Text></Text>
+          <GracePeriodPicker value={graceMinutes} onChange={setGraceMinutes} disabled={isSaving} />
+          <Text style={styles.hint}>服用時間を過ぎてから課金判定までの時間です。5分から1時間まで、5分刻みで選べます。</Text>
         </View>
       </View>
 

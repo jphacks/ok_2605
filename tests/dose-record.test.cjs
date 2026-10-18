@@ -37,7 +37,7 @@ test('dose records are unique per medication and local day', async (context) => 
   assert.deepEqual(duplicate, first);
   assert.notEqual(nextDay.id, first.id);
   assert.deepEqual(await listDoseRecordsForDay(db, '2026-10-18'), [first]);
-  assert.equal((await db.getFirstAsync('PRAGMA user_version')).user_version, 6);
+  assert.equal((await db.getFirstAsync('PRAGMA user_version')).user_version, 7);
 });
 
 test('dose records reject unknown medication and invalid input', async (context) => {
@@ -75,6 +75,13 @@ test('schedule selects overdue, upcoming, then tomorrow', () => {
   const tomorrow = nextScheduledDose(afterAll, medications, now);
   assert.equal(tomorrow.medication.id, 1);
   assert.notEqual(tomorrow.day, day);
+
+  const future = nextScheduledDose([], [{
+    id: 3, name: '来週の薬', doseTime: '09:00', penaltyAmount: 100,
+    createdAt: '2026-10-18T00:00:00Z', activeStartDay: '2026-10-25', activeEndDay: '2026-10-27',
+  }], now);
+  assert.equal(future.day, '2026-10-25');
+  assert.equal(future.medication.id, 3);
 });
 
 test('history records can be loaded by an inclusive date range', async (context) => {

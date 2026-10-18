@@ -3,14 +3,15 @@ const { test } = require('node:test');
 const { createDatabase } = require('./helpers/database.cjs');
 const { initializeMedicationDatabase, saveMedication, listMedications } = require('../src/features/medications/medication-repository.ts');
 const { saveDoseRecord } = require('../src/features/medications/dose-record-repository.ts');
-const { reconcilePenalties, listPenaltyPayments, acknowledgePenalties, retryPenaltyPayment } = require('../src/features/payments/penalty-repository.ts');
+const { doseCountdown, doseDeadline, formatDoseCountdown, reconcilePenalties, listPenaltyPayments, acknowledgePenalties, retryPenaltyPayment } = require('../src/features/payments/penalty-repository.ts');
 const { editMedication, archiveMedication, listMedicationSchedules } = require('../src/features/medications/medication-lifecycle.ts');
 const { deviceQrPayload } = require('../src/features/boxes/medicine-box-repository.ts');
 const { confirmQrDose } = require('../src/features/verification/qr-confirmation.ts');
+const { pendingNfcDoses } = require('../src/features/nfc/nfc-box-repository.ts');
 const { buildHistoryDay } = require('../src/features/medications/medication-history.ts');
 const { listDoseRecordsForDay } = require('../src/features/medications/dose-record-repository.ts');
 const day = '2026-10-18';
-const date = (dayNumber, hour, minute = 0) => new Date(2026, 9, dayNumber, hour, minute);
+const date = (dayNumber, hour, minute = 0, second = 0) => new Date(2026, 9, dayNumber, hour, minute, second);
 async function setup(t, file) {
   const connection = createDatabase(file); t.after(connection.close);
   await initializeMedicationDatabase(connection.db);
@@ -33,6 +34,39 @@ test('actual time: early, grace, exact deadline, parallel checks and acknowledgm
   assert.equal((await db.getFirstAsync('SELECT count(*) AS count FROM penalty_attempts')).count, 1);
   await acknowledgePenalties(db, [payment.id]);
   assert.ok((await reconcilePenalties(db, date(18, 20)))[0].acknowledgedAt);
+});
+
+test('custom grace period drives the countdown and exact payment boundary', async (t) => {
+  const { db, medication } = await setup(t);
+  await db.runAsync('UPDATE medication_schedules SET grace_minutes = 5 WHERE medication_id = ?', medication.id);
+  await db.runAsync('UPDATE medication_groups SET grace_minutes = 5 WHERE id = ?', medication.id);
+  const configured = { ...medication, graceMinutes: 5 };
+  assert.equal(doseDeadline(day, '08:00', 5).getTime(), date(18, 8, 5).getTime());
+  assert.deepEqual(doseCountdown(configured, day, date(18, 7, 55)), { phase: 'until-dose', remainingSeconds: 300 });
+  assert.deepEqual(doseCountdown(configured, day, date(18, 8)), { phase: 'until-penalty', remainingSeconds: 300 });
+  assert.deepEqual(doseCountdown(configured, day, date(18, 8, 4, 1)), { phase: 'until-penalty', remainingSeconds: 59 });
+  assert.deepEqual(doseCountdown(configured, day, date(18, 8, 5)), { phase: 'expired', remainingSeconds: 0 });
+  assert.equal(formatDoseCountdown(300, true), '5分0秒');
+  assert.equal(formatDoseCountdown(277, true), '4分37秒');
+  assert.equal(formatDoseCountdown(45 * 60, false), '45分');
+  assert.equal(formatDoseCountdown((3 * 60 + 20) * 60, false), '3時間20分');
+  assert.equal(formatDoseCountdown((24 * 60 + 15) * 60, false), '1日15分');
+  assert.deepEqual(await reconcilePenalties(db, date(18, 8, 4, 59)), []);
+  assert.equal((await reconcilePenalties(db, date(18, 8, 5))).length, 1);
+  assert.equal(doseDeadline(day, '08:00', 60).getTime(), date(18, 9).getTime());
+});
+
+test('QR and NFC confirmation windows use the selected grace period', async (t) => {
+  const { db, medication } = await setup(t);
+  await db.runAsync('UPDATE medication_schedules SET grace_minutes = 60 WHERE medication_id = ?', medication.id);
+  await db.runAsync('UPDATE medication_groups SET grace_minutes = 60 WHERE id = ?', medication.id);
+  const configured = { ...medication, graceMinutes: 60 };
+  assert.equal(pendingNfcDoses({ tagId: 'AABB', medications: [configured] }, date(18, 8, 59)).length, 1);
+  assert.equal(pendingNfcDoses({ tagId: 'AABB', medications: [configured] }, date(18, 9)).length, 0);
+  const payload = await deviceQrPayload(db);
+  const result = await confirmQrDose(db, medication.id, day, payload, date(18, 8, 59));
+  assert.equal(result.record.medicationId, medication.id);
+  await assert.rejects(confirmQrDose(db, medication.id, day, payload, date(18, 9)), /期限/);
 });
 
 test('on-time taken is exempt; legacy late records retain the penalty', async (t) => {

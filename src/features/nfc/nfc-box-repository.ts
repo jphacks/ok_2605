@@ -2,8 +2,9 @@ import { isMedicationActiveOnDay, type Medication } from '../medications/medicat
 import type { MedicationDatabase } from '../medications/medication-repository.ts';
 import { inTransaction } from '../medications/transaction.ts';
 import { saveDoseRecord } from '../medications/dose-record-repository.ts';
-import { localDay } from '../medications/dose-record.ts';
-import { GRACE_MINUTES, doseDeadline } from '../payments/penalty-repository.ts';
+import { localDay, scheduledDate } from '../medications/dose-record.ts';
+import { medicationGraceMinutes } from '../medications/grace-period.ts';
+import { doseDeadline } from '../payments/penalty-repository.ts';
 import { listMedicineBoxes, type MedicineBox } from '../boxes/medicine-box-repository.ts';
 
 export interface NfcDatabase extends MedicationDatabase {
@@ -90,8 +91,8 @@ export function pendingNfcDoses(box: NfcBox | null, now: Date): NfcDose[] {
   const days = [localDay(yesterday), localDay(now)];
   return box.medications.flatMap((medication) => days.flatMap((day) => {
     if (!isMedicationActiveOnDay(medication, day)) return [];
-    const deadline = doseDeadline(day, medication.doseTime);
-    const start = deadline.getTime() - GRACE_MINUTES * 60_000;
+    const deadline = doseDeadline(day, medication.doseTime, medicationGraceMinutes(medication.graceMinutes));
+    const start = scheduledDate(day, medication.doseTime).getTime();
     return now.getTime() >= start && now.getTime() < deadline.getTime()
       ? [{ medication, day, deadline }] : [];
   }));

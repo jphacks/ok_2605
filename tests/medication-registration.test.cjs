@@ -103,7 +103,7 @@ test('registered medicines survive a file database close and reopen and remain t
     database = createDatabase(file);
     await initializeMedicationDatabase(database.db);
     assert.deepEqual(await listMedications(database.db), [morning, sameTime, night]);
-    assert.deepEqual(await database.db.getFirstAsync('PRAGMA user_version'), { user_version: 6 });
+    assert.deepEqual(await database.db.getFirstAsync('PRAGMA user_version'), { user_version: 7 });
   } finally {
     database?.connection.close();
     await rm(directory, { recursive: true, force: true });
@@ -147,20 +147,23 @@ test('database constraints reject invalid stored values', async (context) => {
   assert.deepEqual(await listMedications(db), []);
 });
 
-test('reinitializing accepts the shipped iOS v6 database and leaves newer schemas untouched', async (context) => {
+test('v6 databases gain the grace period and newer schemas remain untouched', async (context) => {
   const { connection, db } = createDatabase();
   context.after(() => connection.close());
   await initializeMedicationDatabase(db);
   const medication = await saveMedication(db, validInput);
+  await db.execAsync('ALTER TABLE medication_schedules DROP COLUMN grace_minutes; ALTER TABLE medication_groups DROP COLUMN grace_minutes; PRAGMA user_version = 6;');
   await initializeMedicationDatabase(db);
   assert.deepEqual(await listMedications(db), [medication]);
-  assert.deepEqual(await db.getFirstAsync('PRAGMA user_version'), { user_version: 6 });
+  assert.deepEqual(await db.getFirstAsync('SELECT grace_minutes AS graceMinutes FROM medication_schedules'), { graceMinutes: 30 });
+  assert.deepEqual(await db.getFirstAsync('SELECT grace_minutes AS graceMinutes FROM medication_groups'), { graceMinutes: 30 });
+  assert.deepEqual(await db.getFirstAsync('PRAGMA user_version'), { user_version: 7 });
   await initializeMedicationDatabase(db);
   assert.deepEqual(await listMedications(db), [medication]);
-  await db.execAsync('PRAGMA user_version = 7;');
+  await db.execAsync('PRAGMA user_version = 8;');
   await assert.rejects(initializeMedicationDatabase(db), /新しいデータベース形式/);
   assert.deepEqual(await listMedications(db), [medication]);
-  assert.deepEqual(await db.getFirstAsync('PRAGMA user_version'), { user_version: 7 });
+  assert.deepEqual(await db.getFirstAsync('PRAGMA user_version'), { user_version: 8 });
 });
 
 test('repository validates independently and leaves no record after a failed insert', async (context) => {
@@ -226,16 +229,28 @@ test('one medication plan links every dose time and stores its inclusive period'
     unit: '錠',
     inventory: '90',
     memo: '食後',
+    graceMinutes: 45,
   });
   assert.equal(saved.length, 2);
   assert.deepEqual(saved.map((item) => item.doseTime), ['08:00', '20:00']);
   assert.equal(saved[0].groupId, saved[1].groupId);
   assert.deepEqual(await listMedications(db), saved);
-  const schedules = await db.getAllAsync(`SELECT medication_id AS medicationId, starts_at AS startsAt, ends_at AS endsAt
+  const schedules = await db.getAllAsync(`SELECT medication_id AS medicationId, starts_at AS startsAt, ends_at AS endsAt,
+    grace_minutes AS graceMinutes
     FROM medication_schedules ORDER BY medication_id`);
   assert.equal(schedules.length, 2);
   assert.ok(schedules.every((item) => item.startsAt === '2026-10-19T15:00:00.000Z'));
   assert.deepEqual(schedules.map((item) => item.endsAt), ['2026-11-18T23:00:00.000Z', '2026-11-19T11:00:00.000Z']);
-  const groups = await db.getAllAsync('SELECT id, inventory, memo FROM medication_groups WHERE is_plan = 1');
-  assert.deepEqual(groups, [{ id: saved[0].groupId, inventory: 90, memo: '食後' }]);
+  assert.ok(schedules.every((item) => item.graceMinutes === 45));
+  const groups = await db.getAllAsync('SELECT id, inventory, memo, grace_minutes AS graceMinutes FROM medication_groups WHERE is_plan = 1');
+  assert.deepEqual(groups, [{ id: saved[0].groupId, inventory: 90, memo: '食後', graceMinutes: 45 }]);
+  const invalid = {
+    name: '猶予時間エラー', doses: [{ doseTime: '10:00', doseAmount: '1' }], penaltyAmount: '100',
+    startDay: '2026-10-20', endDay: null, notificationsEnabled: false,
+    unit: '錠', inventory: '', memo: '',
+  };
+  await assert.rejects(saveMedicationPlan(db, { ...invalid, graceMinutes: 4 }), /5分から60分/);
+  await assert.rejects(saveMedicationPlan(db, { ...invalid, graceMinutes: 7 }), /5分から60分/);
+  await assert.rejects(saveMedicationPlan(db, { ...invalid, graceMinutes: 61 }), /5分から60分/);
+  assert.equal((await listMedications(db)).length, 2);
 });
