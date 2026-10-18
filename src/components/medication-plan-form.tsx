@@ -4,12 +4,14 @@ import { ActivityIndicator, Keyboard, Pressable, StyleSheet, Switch, Text, TextI
 
 import { DateCalendarModal } from '@/components/date-calendar-modal';
 import { GracePeriodPicker } from '@/components/grace-period-picker';
+import { MedicationChargeConsent } from '@/components/medication-charge-consent';
 import { MedicationRegistryStatus } from '@/components/medication-registry-status';
 import { MedicationScreen, medicationColors as C } from '@/components/medication-screen';
 import { TimeDropdown } from '@/components/time-dropdown';
 import { localDay, scheduledDate } from '@/features/medications/dose-record';
 import { DEFAULT_GRACE_MINUTES } from '@/features/medications/grace-period';
 import { MIN_PENALTY_AMOUNT, MedicationValidationError, type MedicationFieldErrors, type MedicationPlanInput } from '@/features/medications/medication';
+import { validateMedicationPlan } from '@/features/medications/medication-plan';
 import { useMedicationRegistry } from '@/state/medication-registry-context';
 import { MedicineBoxPicker } from '@/components/medicine-box-picker';
 import { useNfcBox } from '@/state/nfc-box-context';
@@ -58,6 +60,7 @@ export function MedicationPlanForm({ medicationId, initialValue }: { medicationI
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [errors, setErrors] = useState<MedicationFieldErrors>({});
   const [formError, setFormError] = useState('');
+  const [pendingRegistration, setPendingRegistration] = useState<MedicationPlanInput | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const submitting = useRef(false);
   const nextId = useRef((initialValue?.doses.length ?? 1) + 1);
@@ -75,7 +78,25 @@ export function MedicationPlanForm({ medicationId, initialValue }: { medicationI
     clearError();
   };
 
-  const submit = async () => {
+  const save = async (value: MedicationPlanInput) => {
+    if (submitting.current || isLoading || loadError) return;
+    submitting.current = true;
+    setIsSaving(true);
+    setFormError('');
+    try {
+      const saved = editing ? await updateMedicationPlan(medicationId, value) : await registerMedicationPlan(value);
+      router.dismissTo({ pathname: '/medications', params: editing ? { updated: String(saved[0].id) } : { registered: String(saved[0].id) } });
+    } catch (error) {
+      if (error instanceof MedicationValidationError) setErrors(error.errors);
+      else setFormError(error instanceof Error ? error.message : '保存できませんでした。もう一度お試しください。');
+      if (!editing) setPendingRegistration(null);
+    } finally {
+      submitting.current = false;
+      setIsSaving(false);
+    }
+  };
+
+  const submit = () => {
     if (submitting.current || isLoading || loadError) return;
     if (!boxes.some((box) => String(box.id) === selectedBoxId)) {
       setErrors((current) => ({ ...current, boxId: 'お薬を入れる薬箱を選択してください。' }));
@@ -84,34 +105,32 @@ export function MedicationPlanForm({ medicationId, initialValue }: { medicationI
     if (!doses.length) { setFormError('服用時間を1件以上追加してください。'); return; }
     if (periodMode === 'days' && endDay === null) { setFormError('服用日数を1日以上の整数で入力してください。'); return; }
 
-    submitting.current = true;
-    setIsSaving(true);
+    const value: MedicationPlanInput = {
+      boxId: selectedBoxId,
+      name,
+      doses,
+      penaltyAmount,
+      startDay,
+      endDay,
+      notificationsEnabled,
+      unit,
+      inventory,
+      memo,
+      graceMinutes,
+      graceBeforeMinutes,
+    };
+    setErrors({});
     setFormError('');
     Keyboard.dismiss();
     try {
-      const value: MedicationPlanInput = {
-        boxId: selectedBoxId,
-        name,
-        doses,
-        penaltyAmount,
-        startDay,
-        endDay,
-        notificationsEnabled,
-        unit,
-        inventory,
-        memo,
-        graceMinutes,
-        graceBeforeMinutes,
-      };
-      const saved = editing ? await updateMedicationPlan(medicationId, value) : await registerMedicationPlan(value);
-      router.dismissTo({ pathname: '/medications', params: editing ? { updated: String(saved[0].id) } : { registered: String(saved[0].id) } });
+      validateMedicationPlan(value);
     } catch (error) {
       if (error instanceof MedicationValidationError) setErrors(error.errors);
       else setFormError(error instanceof Error ? error.message : '保存できませんでした。もう一度お試しください。');
-    } finally {
-      submitting.current = false;
-      setIsSaving(false);
+      return;
     }
+    if (editing) void save(value);
+    else setPendingRegistration(value);
   };
 
   async function remove() {
@@ -123,6 +142,18 @@ export function MedicationPlanForm({ medicationId, initialValue }: { medicationI
   }
 
   const disabled = isSaving || isLoading || !!loadError || boxesLoading || !!boxesError;
+
+  if (!editing && pendingRegistration) {
+    return (
+      <MedicationChargeConsent
+        medicationName={pendingRegistration.name}
+        penaltyAmount={pendingRegistration.penaltyAmount}
+        busy={isSaving}
+        onCancel={() => setPendingRegistration(null)}
+        onConfirm={() => void save(pendingRegistration)}
+      />
+    );
+  }
 
   return (
     <MedicationScreen title={editing ? "おくすりの情報・編集" : "薬を登録する"} description={editing ? "登録したすべての項目を変更できます。変更はこの薬の各服用時間に適用します。" : "服用時間と期間を設定しましょう。"} backTo="/medications" busy={isSaving}>
@@ -330,7 +361,7 @@ export function MedicationPlanForm({ medicationId, initialValue }: { medicationI
         accessibilityRole="button"
         accessibilityState={{ disabled, busy: isSaving }}
         disabled={disabled}
-        onPress={() => void submit()}
+        onPress={submit}
         style={[styles.submit, disabled && styles.disabled]}>
         {isSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>{editing ? "変更を保存" : "登録する"}</Text>}
       </Pressable>

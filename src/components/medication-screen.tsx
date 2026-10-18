@@ -1,5 +1,5 @@
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, type PropsWithChildren } from 'react';
+import { useCallback, type PropsWithChildren, type ReactNode } from 'react';
 import { BackHandler, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppBottomNav } from './app-bottom-nav';
@@ -20,14 +20,19 @@ type MedicationScreenProps = PropsWithChildren<{
   backTo?: '/' | '/medications' | '/explore' | '/boxes';
   busy?: boolean;
   hideNavigation?: boolean;
+  footer?: ReactNode;
+  onBack?: () => void;
 }>;
 
-export function MedicationScreen({ title, description, backTo = '/', busy = false, hideNavigation = false, children }: MedicationScreenProps) {
+export function MedicationScreen({ title, description, backTo = '/', busy = false, hideNavigation = false, footer, onBack, children }: MedicationScreenProps) {
   useFocusEffect(useCallback(() => {
-    if (!hideNavigation) return;
-    const subscription = BackHandler.addEventListener('hardwareBackPress', () => true);
+    if (!hideNavigation && !onBack) return;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!busy) onBack?.();
+      return true;
+    });
     return () => subscription.remove();
-  }, [hideNavigation]));
+  }, [busy, hideNavigation, onBack]));
   return (
     <SafeAreaView edges={hideNavigation ? undefined : ['top', 'left', 'right']} style={styles.safe}>
       <KeyboardAvoidingView style={styles.safe} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -36,7 +41,7 @@ export function MedicationScreen({ title, description, backTo = '/', busy = fals
             accessibilityRole="button"
             accessibilityLabel="前の画面に戻る"
             disabled={busy}
-            onPress={() => router.canGoBack() ? router.back() : router.replace(backTo)}
+            onPress={onBack ?? (() => router.canGoBack() ? router.back() : router.replace(backTo))}
             style={styles.back}>
             <Text style={styles.backText}>‹</Text>
           </Pressable>}
@@ -47,6 +52,7 @@ export function MedicationScreen({ title, description, backTo = '/', busy = fals
           <Text style={styles.description}>{description}</Text>
           <View style={styles.body}>{children}</View>
         </ScrollView>
+        {!!footer && <View style={styles.footer}>{footer}</View>}
       </KeyboardAvoidingView>
       {!hideNavigation && <AppBottomNav disabled={busy} />}
     </SafeAreaView>
@@ -63,4 +69,5 @@ const styles = StyleSheet.create({
   title: { flex: 1, textAlign: 'center', fontSize: 16, color: medicationColors.ink, fontWeight: '700' },
   description: { color: medicationColors.muted, fontSize: 12, lineHeight: 23, marginTop: 12 },
   body: { marginTop: 22, gap: 16 },
+  footer: { width: '100%', maxWidth: 560, alignSelf: 'center', paddingHorizontal: 24, paddingTop: 10, paddingBottom: 8, backgroundColor: medicationColors.background },
 });
