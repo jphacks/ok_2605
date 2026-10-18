@@ -7,7 +7,7 @@ export default function ExploreScreen() {
     <MedicationScreen title="設定" description="あなたに合った、続けやすい毎日へ。">
       <View style={styles.card}>
         {([
-          ['/reminders', '通知設定'],
+          ['/reminders', '通知設定・デモ通知'],
           ['/payment-card', 'クレジットカード設定'],
           ['/penalties', 'ペナルティ・履歴'],
           ['/medications', 'お薬の管理'],
