@@ -106,9 +106,9 @@ export default function HistoryScreen() {
                 onPress={() => setSelectedDay(day)}
                 style={[styles.dayCell, selectedCell && styles.selectedDay]}>
                 <Text style={[styles.dayNumber, day === today && styles.todayText]}>{dayNumber}</Text>
-                {history?.status === 'complete' && <Text style={[styles.marker, styles.complete]}>✓</Text>}
-                {history?.status === 'missed' && <Text style={[styles.marker, styles.missed]}>!</Text>}
-                {history?.status === 'pending' && <Text style={[styles.marker, styles.pending]}>·</Text>}
+                {history?.status === 'complete' && <Text style={[styles.marker, styles.complete]}>●</Text>}
+                {history?.status === 'missed' && <Text style={[styles.marker, styles.missed]}>●</Text>}
+                {history?.status === 'pending' && <Text style={[styles.marker, styles.pending]}>●</Text>}
               </Pressable>
             );
           })}

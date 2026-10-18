@@ -18,7 +18,7 @@ import { usePenalties } from '@/state/penalty-context';
 
 function progressImage(progress: number) {
   const circumference = 2 * Math.PI * 52;
-  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"><circle cx="64" cy="64" r="52" fill="none" stroke="#f0eae6" stroke-width="9"/><circle cx="64" cy="64" r="52" fill="none" stroke="#43b88b" stroke-width="9" stroke-linecap="round" stroke-dasharray="' + circumference * progress + ' ' + circumference + '" transform="rotate(-90 64 64)"/></svg>';
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"><circle cx="64" cy="64" r="52" fill="none" stroke="#f0eae6" stroke-width="9"/><circle cx="64" cy="64" r="52" fill="none" stroke="#f56889" stroke-width="9" stroke-linecap="round" stroke-dasharray="' + circumference * progress + ' ' + circumference + '" transform="rotate(-90 64 64)"/></svg>';
   return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
 }
 
@@ -120,7 +120,7 @@ export default function HomeScreen() {
             return <Pressable key={group.key} accessibilityRole="button" accessibilityLabel={item.medication.doseTime + ' ' + names + '、' + (isTaken ? '服用済み' : canScan ? '受付時間内のお薬をまとめて記録する' : expired ? '確認期限終了' : '服用時間前')} accessibilityState={{ disabled: !canScan }} disabled={!canScan} onPress={() => openScanner(item.medication.id, item.scheduledDay)} style={styles.doseRow}>
               <View style={[styles.timeIcon, hour >= 17 && styles.nightIcon]}><Text style={[styles.sun, hour >= 17 && styles.moon]}>{hour < 17 ? '☀' : '☾'}</Text></View>
               <View style={{ flex: 1, gap: 5 }}><View style={styles.doseHeading}><Text style={styles.doseTime}>{item.scheduledDay !== day ? `${Number(item.scheduledDay.slice(5, 7))}/${Number(item.scheduledDay.slice(8))} ` : ''}{item.medication.doseTime}</Text><Text style={styles.doseName}>{names}</Text></View><Text style={styles.doseNote}>{box?.name ?? '薬箱未選択'}{canScan ? ' · 受付中' : expired ? ' · 確認期限終了' : ''}</Text>{group.items.length > 1 && <Text style={styles.doseNote}>{completed}/{group.items.length}件服用済み{canScan ? ' · まとめて記録する' : ''}{expired && canScan ? ' · 一部は確認期限終了' : ''}</Text>}</View>
-              <View style={[styles.status, isTaken && styles.statusTaken]}><Text style={[styles.statusText, isTaken && { color: '#fff' }]}>{isTaken ? '✓' : expired ? '!' : ''}</Text></View>
+              <View style={[styles.status, isTaken && styles.statusTaken]}><Text style={styles.statusText}>{isTaken ? '✓' : expired ? '!' : ''}</Text></View>
             </Pressable>;
           })}
         </View>
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
   timeIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#fff1d9', alignItems: 'center', justifyContent: 'center' }, nightIcon: { backgroundColor: '#efecfc' },
   sun: { color: '#e8ad4c', fontSize: 22 }, moon: { color: '#a29bd6' }, doseHeading: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, alignItems: 'center' },
   doseTime: { color: C.ink, fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'] }, doseName: { color: C.ink, fontSize: 13 }, doseNote: { color: C.muted, fontSize: 10 },
-  status: { width: 23, height: 23, borderRadius: 12, borderWidth: 1, borderColor: '#cec4c5', alignItems: 'center', justifyContent: 'center' }, statusTaken: { backgroundColor: '#43b88b', borderColor: '#43b88b' }, statusText: { color: C.mint, fontSize: 14, fontWeight: '700' },
+  status: { width: 23, height: 23, borderRadius: 12, borderWidth: 1, borderColor: '#cec4c5', alignItems: 'center', justifyContent: 'center' }, statusTaken: { backgroundColor: C.pale, borderColor: C.mint }, statusText: { color: C.mint, fontSize: 14, fontWeight: '700' },
   primary: { minHeight: 50, backgroundColor: C.mint, borderRadius: 26, padding: 14, alignItems: 'center', justifyContent: 'center', marginTop: 6 },
   primaryText: { color: '#fff', fontSize: 14, fontWeight: '700', textAlign: 'center' }, secondary: { minHeight: 44, alignItems: 'center', justifyContent: 'center' }, link: { color: C.mint, fontSize: 12 }, error: { color: C.error, fontSize: 13, lineHeight: 22 },
 });
