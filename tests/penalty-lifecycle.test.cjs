@@ -3,7 +3,7 @@ const { test } = require('node:test');
 const { createDatabase } = require('./helpers/database.cjs');
 const { initializeMedicationDatabase, saveMedication, listMedications } = require('../src/features/medications/medication-repository.ts');
 const { saveDoseRecord } = require('../src/features/medications/dose-record-repository.ts');
-const { doseCountdown, doseDeadline, formatDoseCountdown, reconcilePenalties, listPenaltyPayments, acknowledgePenalties, retryPenaltyPayment } = require('../src/features/payments/penalty-repository.ts');
+const { doseCountdown, doseDeadline, formatDoseCountdown, wasScheduledBeforeDose, reconcilePenalties, listPenaltyPayments, acknowledgePenalties, retryPenaltyPayment } = require('../src/features/payments/penalty-repository.ts');
 const { editMedication, archiveMedication, listMedicationSchedules } = require('../src/features/medications/medication-lifecycle.ts');
 const { deviceQrPayload } = require('../src/features/boxes/medicine-box-repository.ts');
 const { confirmQrDose } = require('../src/features/verification/qr-confirmation.ts');
@@ -43,6 +43,7 @@ test('custom grace period drives the countdown and exact payment boundary', asyn
   const configured = { ...medication, graceMinutes: 5 };
   assert.equal(doseDeadline(day, '08:00', 5).getTime(), date(18, 8, 5).getTime());
   assert.deepEqual(doseCountdown(configured, day, date(18, 7, 55)), { phase: 'until-dose', remainingSeconds: 300 });
+  assert.deepEqual(doseCountdown({ ...configured, graceBeforeMinutes: 10 }, day, date(18, 7, 55)), { phase: 'until-dose', remainingSeconds: 300 });
   assert.deepEqual(doseCountdown(configured, day, date(18, 8)), { phase: 'until-penalty', remainingSeconds: 300 });
   assert.deepEqual(doseCountdown(configured, day, date(18, 8, 4, 1)), { phase: 'until-penalty', remainingSeconds: 59 });
   assert.deepEqual(doseCountdown(configured, day, date(18, 8, 5)), { phase: 'expired', remainingSeconds: 0 });
@@ -90,6 +91,20 @@ test('registration after a scheduled time never back-charges that morning', asyn
   await db.runAsync('UPDATE medication_schedules SET starts_at = ? WHERE medication_id = ?', date(18, 9).toISOString(), medication.id);
   assert.deepEqual(await reconcilePenalties(db, date(18, 10)), []);
   assert.equal((await reconcilePenalties(db, date(19, 9))).length, 1);
+});
+
+test('home countdown distinguishes chargeable doses from newly registered or edited past times', () => {
+  assert.equal(wasScheduledBeforeDose({ createdAt: date(18, 7, 59).toISOString(), doseTime: '08:00' }, day), true);
+  assert.equal(wasScheduledBeforeDose({ createdAt: date(18, 8, 0, 1).toISOString(), doseTime: '08:00' }, day), false);
+  assert.equal(wasScheduledBeforeDose({ createdAt: date(18, 7, 59).toISOString(), scheduleStartsAt: date(18, 8, 0, 1).toISOString(), doseTime: '08:00' }, day), false);
+});
+
+test('editing after the dose time updates the active schedule used by the home countdown', async (t) => {
+  const { db, medication } = await setup(t);
+  await editMedication(db, medication.id, { name: '変更後', doseTime: '08:00', penaltyAmount: '300' }, date(18, 8, 0, 1));
+  const [current] = await listMedications(db);
+  assert.equal(wasScheduledBeforeDose(current, day), false);
+  assert.deepEqual(await reconcilePenalties(db, date(18, 8, 31)), []);
 });
 
 test('late night grace crossing midnight uses the previous scheduled day', async (t) => {

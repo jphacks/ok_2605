@@ -1,6 +1,6 @@
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Keyboard, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, Pressable, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 
 import { DateCalendarModal } from '@/components/date-calendar-modal';
 import { GracePeriodPicker } from '@/components/grace-period-picker';
@@ -57,7 +57,6 @@ export function MedicationPlanForm({ medicationId, initialValue }: { medicationI
   const [penaltyAmount, setPenaltyAmount] = useState(initialValue?.penaltyAmount ?? String(MIN_PENALTY_AMOUNT));
   const [graceMinutes, setGraceMinutes] = useState(initialValue?.graceMinutes ?? DEFAULT_GRACE_MINUTES);
   const [graceBeforeMinutes, setGraceBeforeMinutes] = useState(initialValue?.graceBeforeMinutes ?? 0);
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const [errors, setErrors] = useState<MedicationFieldErrors>({});
   const [formError, setFormError] = useState('');
   const [pendingRegistration, setPendingRegistration] = useState<MedicationPlanInput | null>(null);
@@ -139,6 +138,18 @@ export function MedicationPlanForm({ medicationId, initialValue }: { medicationI
     try { await deleteMedicationPlan(medicationId); router.dismissTo('/medications'); }
     catch (error) { setFormError(error instanceof Error ? error.message : '削除できませんでした。'); }
     finally { submitting.current = false; setIsSaving(false); }
+  }
+
+  function confirmRemove() {
+    if (!editing || disabled) return;
+    Alert.alert(
+      'この薬を削除しますか？',
+      `「${name}」の服用予定を削除します。過去の記録は残ります。`,
+      [
+        { text: 'キャンセル', style: 'cancel' },
+        { text: '削除', style: 'destructive', onPress: () => void remove() },
+      ],
+    );
   }
 
   const disabled = isSaving || isLoading || !!loadError || boxesLoading || !!boxesError;
@@ -367,11 +378,7 @@ export function MedicationPlanForm({ medicationId, initialValue }: { medicationI
       </Pressable>
 
       {editing && <View style={styles.field}>
-        {confirmDelete ? <>
-          <Text style={styles.notice}>この薬のすべての服用時間を削除しますか？ 過去の記録は残ります。</Text>
-          <Pressable accessibilityRole="button" disabled={isSaving} onPress={() => setConfirmDelete(false)} style={styles.secondaryButton}><Text>キャンセル</Text></Pressable>
-          <Pressable accessibilityRole="button" disabled={isSaving} onPress={() => void remove()} style={styles.secondaryButton}><Text style={styles.error}>この薬を削除する</Text></Pressable>
-        </> : <Pressable accessibilityRole="button" disabled={disabled} onPress={() => setConfirmDelete(true)} style={styles.secondaryButton}><Text style={styles.error}>この薬を削除する</Text></Pressable>}
+        <Pressable accessibilityRole="button" disabled={disabled} onPress={confirmRemove} style={styles.secondaryButton}><Text style={styles.error}>この薬を削除する</Text></Pressable>
       </View>}
 
       {calendarTarget && (

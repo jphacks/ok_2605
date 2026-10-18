@@ -142,7 +142,9 @@ export async function listMedications(db: MedicationDatabase): Promise<Medicatio
     isPlan: number; rawNotificationsEnabled: number;
   }>(`
     SELECT m.id, m.name, m.dose_time AS doseTime, m.penalty_amount AS penaltyAmount,
-      m.created_at AS createdAt, g.id AS groupId, gd.dose_amount AS doseAmount,
+      m.created_at AS createdAt,
+      (SELECT s.starts_at FROM medication_schedules s WHERE s.medication_id = m.id ORDER BY s.id DESC LIMIT 1) AS scheduleStartsAt,
+      g.id AS groupId, gd.dose_amount AS doseAmount,
       g.unit, g.starts_on AS activeStartDay, g.ends_on AS activeEndDay, g.grace_minutes AS graceMinutes, g.grace_before_minutes AS graceBeforeMinutes,
       g.notifications_enabled AS rawNotificationsEnabled, g.is_plan AS isPlan
     FROM medications m
@@ -180,7 +182,7 @@ export async function saveMedication(db: MedicationDatabase, input: MedicationIn
   );
 
   // The INSERT has committed. A separate list query must not turn success into a retryable failure.
-  return { id: lastInsertRowId, name, doseTime, penaltyAmount, createdAt };
+  return { id: lastInsertRowId, name, doseTime, penaltyAmount, createdAt, scheduleStartsAt: createdAt };
 }
 
 export async function saveMedicationPlan(db: TransactionDatabase, input: MedicationPlanInput): Promise<Medication[]> {
@@ -220,7 +222,7 @@ export async function saveMedicationPlan(db: TransactionDatabase, input: Medicat
       if (input.boxId !== undefined) await assignMedicineBox(transaction, medicationId, Number(input.boxId));
       saved.push({
         id: medicationId, name: dose.name, doseTime: dose.doseTime, penaltyAmount: dose.penaltyAmount,
-        createdAt, groupId, doseAmount: dose.doseAmount, unit,
+        createdAt, scheduleStartsAt: startsAt, groupId, doseAmount: dose.doseAmount, unit,
         activeStartDay: input.startDay, activeEndDay: input.endDay,
         notificationsEnabled: input.notificationsEnabled, graceMinutes: input.graceMinutes, graceBeforeMinutes,
       });
