@@ -9,6 +9,8 @@ import { getMedicationDatabase } from '@/features/medications/database';
 import { confirmQrDose } from './qr-confirmation';
 import { useDoseRecords } from '@/state/dose-record-context';
 import { useMedicationRegistry } from '@/state/medication-registry-context';
+import { useNfcBox } from '@/state/nfc-box-context';
+import { isMedicationActiveOnDay } from '@/features/medications/medication';
 
 export default function QrScreen() {
   const router = useRouter();
@@ -19,6 +21,9 @@ export default function QrScreen() {
   const { medications, isLoading: medicationsLoading } = useMedicationRegistry();
   const { records, isLoading: recordsLoading, refresh } = useDoseRecords();
   const medication = medications.find((item) => item.id === medicationId);
+  const { boxes, reload } = useNfcBox();
+  const box = boxes.find((box) => box.medications.some((item) => item.id === medicationId));
+  const names = box?.medications.filter((item) => item.doseTime === medication?.doseTime && isMedicationActiveOnDay(item, occurrenceDay)).map((item) => item.name).join('・') || medication?.name;
   const alreadyTaken = records.some((record) => record.medicationId === medicationId && record.scheduledDay === occurrenceDay);
   const [permission, requestPermission, getPermission] = useCameraPermissions();
   const [focused, setFocused] = useState(false);
@@ -60,8 +65,8 @@ export default function QrScreen() {
     try {
       if (source === 'demo' && !__DEV__) throw new Error('開発用の操作は利用できません。');
       const result = await confirmQrDose(await getMedicationDatabase(), medication.id, params.scheduledDay ?? '', data, new Date(), source === 'demo');
-      await refresh();
-      if (visible.current) router.replace({ pathname: '/dose-complete', params: { medicationName: result.medication.name, doseTime: result.medication.doseTime } });
+      await Promise.all([refresh(), reload()]);
+      if (visible.current) router.replace({ pathname: '/dose-complete', params: { medicationName: result.medications.map((item) => item.name).join('・'), doseTime: result.medication.doseTime } });
     } catch (cause) {
       Alert.alert('服用を記録できませんでした', cause instanceof Error ? cause.message : '保存できませんでした。もう一度お試しください。', [{ text: '確認', onPress: () => { scanLocked.current = false; setScanned(false); } }], { cancelable: false });
     }
@@ -97,7 +102,7 @@ export default function QrScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <Text style={styles.headerTitle}>{medication.name}を服用する</Text>
+      <Text style={styles.headerTitle}>{names}を服用する</Text>
       <View style={styles.cameraWrap}>
         {focused && foreground && !scanned && <CameraView
           style={StyleSheet.absoluteFill}
@@ -110,6 +115,7 @@ export default function QrScreen() {
         <Text style={styles.guide}>この端末の共通QRコードを枠に合わせてください</Text>
       </View>
       <View style={styles.bottom}>
+        <Text style={styles.body}>同じ薬箱・時刻の、受付時間内のお薬をまとめて記録します。</Text>
         <Text style={styles.body}>{scanned ? '服薬記録を保存しています…' : `${medication.doseTime}の服薬予定`}</Text>
         {demoButton}
         {cancel}

@@ -4,6 +4,7 @@ import { ActivityIndicator, AppState, Pressable, StyleSheet, Text, View } from '
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { nearbyScheduledDays } from '@/features/medications/dose-record';
+import { isMedicationActiveOnDay } from '@/features/medications/medication';
 import { getMedicationDatabase } from '@/features/medications/database';
 import { useDoseRecords } from '@/state/dose-record-context';
 import { useMedicationRegistry } from '@/state/medication-registry-context';
@@ -24,6 +25,7 @@ export default function NfcDoseConfirmationScreen() {
   const { boxes, loading: boxLoading, error: boxError, reload } = useNfcBox();
   const box = boxes.find((item) => item.medications.some((m) => m.id === medicationId) && item.tagId);
   const medication = medications.find((item) => item.id === medicationId);
+  const names = box?.medications.filter((item) => item.doseTime === medication?.doseTime && isMedicationActiveOnDay(item, occurrenceDay)).map((item) => item.name).join('・') || medication?.name;
   const alreadyTaken = records.some((record) => record.medicationId === medicationId && record.scheduledDay === occurrenceDay);
   const boxHasMedication = box?.medications.some((item) => item.id === medicationId) ?? false;
   const [focused, setFocused] = useState(false);
@@ -104,7 +106,11 @@ export default function NfcDoseConfirmationScreen() {
     return 'ready';
   }, [alreadyTaken, box, boxError, boxHasMedication, boxLoading, medication, medicationsLoading, recordsLoading, validOccurrence]);
 
-  const goHome = () => router.dismissTo('/');
+  const goHome = () => {
+    active.current = false;
+    controller.current?.abort();
+    router.dismissTo('/');
+  };
   const retry = () => {
     startedAttempt.current = null;
     setAttempt((current) => current + 1);
@@ -137,7 +143,7 @@ export default function NfcDoseConfirmationScreen() {
     <SafeAreaView style={styles.safe}>
       <Stack.Screen options={{ gestureEnabled: !busy }} />
       <View style={styles.header}>
-        <Pressable accessibilityRole="button" accessibilityLabel="ホームへ戻る" disabled={busy} onPress={goHome} style={styles.back}>
+        <Pressable accessibilityRole="button" accessibilityLabel="ホームへ戻る" onPress={goHome} style={styles.back}>
           <Text style={styles.backText}>‹</Text>
         </Pressable>
         <Text style={styles.headerTitle}>服用確認</Text>
@@ -147,8 +153,9 @@ export default function NfcDoseConfirmationScreen() {
       <View style={styles.content}>
         <Text style={styles.kicker}>MEDICINE TIME</Text>
         <Text style={styles.time}>{medication.doseTime}</Text>
-        <View style={styles.namePill}><Text style={styles.name}>{medication.name}</Text></View>
-        <Text accessibilityRole="header" style={styles.question}>{medication.name}を{`\n`}飲みましたか？</Text>
+        <View style={styles.namePill}><Text style={styles.name}>{names}</Text></View>
+        <Text accessibilityRole="header" style={styles.question}>お薬をすべて{`\n`}飲みましたか？</Text>
+        <Text style={styles.body}>同じ薬箱・時刻の、受付時間内のお薬をまとめて記録します。</Text>
 
         <View accessible accessibilityLabel="NFCタグにスマートフォンを近づけてください" style={styles.nfcVisual}>
           <View style={styles.waveLarge} />
@@ -167,7 +174,7 @@ export default function NfcDoseConfirmationScreen() {
       </View>
 
       <View style={styles.footer}>
-        <Pressable accessibilityRole="button" onPress={() => { controller.current?.abort(); goHome(); }} style={styles.cancel}>
+        <Pressable accessibilityRole="button" onPress={goHome} style={styles.cancel}>
           <Text style={styles.cancelText}>あとで飲む</Text>
         </Pressable>
       </View>

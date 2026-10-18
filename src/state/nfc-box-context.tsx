@@ -24,7 +24,8 @@ export function NfcBoxProvider({ children }: PropsWithChildren) {
     const date = new Date();
     return getMedicationDatabase().then((db) => loadNfcBox(db, date)).then((result) => {
       if (request === version.current) { setSnapshot(result); setNow(date); setError(null); }
-    }, () => {
+    }, (cause: unknown) => {
+      console.warn('薬箱・服用記録の読み込みに失敗しました', cause);
       if (request === version.current) setError('薬箱の登録・服用記録を読み込めませんでした。再読み込みしてください。');
     }).finally(() => {
       if (request === version.current) setLoading(false);
