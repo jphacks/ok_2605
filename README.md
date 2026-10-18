@@ -13,7 +13,7 @@
 
 アプリの表示名とAndroidのネイティブ構成も変わるため、既存Development Buildへの反映にはPrebuildと再ビルドが必要です（下記の開発環境手順を参照）。
 
-[![IMAGE ALT TEXT HERE](https://jphacks.com/wp-content/uploads/2026/07/IMG_5316.png)](https://www.youtube.com/watch?v=piaNsc6ilBI)
+[![のむペイ アプリ紹介](assets/images/app-thumbnail.png)](https://www.youtube.com/watch?v=piaNsc6ilBI)
 
 ## 製品概要
 「のむペイ」は、通知だけでは薬を後回しにしてしまう人のための服薬習慣化アプリです。服用時刻になると通知を送り、薬を飲んだ後に薬箱へ設置した識別用ツール（iOSはQRコード、AndroidはNFCタグ）を読み取ることで服用を記録します。設定した猶予時間内に記録できなかった場合は、あらかじめ決めた金額のペナルティを記録し、「今飲む」ためのきっかけをつくります。
