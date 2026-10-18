@@ -37,7 +37,7 @@ test('dose records are unique per medication and local day', async (context) => 
   assert.deepEqual(duplicate, first);
   assert.notEqual(nextDay.id, first.id);
   assert.deepEqual(await listDoseRecordsForDay(db, '2026-10-18'), [first]);
-  assert.equal((await db.getFirstAsync('PRAGMA user_version')).user_version, 4);
+  assert.equal((await db.getFirstAsync('PRAGMA user_version')).user_version, 5);
 });
 
 test('dose records reject unknown medication and invalid input', async (context) => {

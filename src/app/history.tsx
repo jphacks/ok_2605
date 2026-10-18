@@ -1,5 +1,5 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { MedicationScreen, medicationColors as C } from '@/components/medication-screen';
@@ -7,7 +7,9 @@ import { getMedicationDatabase } from '@/features/medications/database';
 import { localDay, scheduledDate, type DoseRecord } from '@/features/medications/dose-record';
 import { listDoseRecordsBetween } from '@/features/medications/dose-record-repository';
 import { buildHistoryDay, monthCalendarDays, monthRange, type HistoryDayStatus } from '@/features/medications/medication-history';
+import { listMedicationSchedules, type HistoricalMedication } from '@/features/medications/medication-lifecycle';
 import { useMedicationRegistry } from '@/state/medication-registry-context';
+import { usePenalties } from '@/state/penalty-context';
 
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
 
@@ -20,38 +22,46 @@ const statusLabel: Record<HistoryDayStatus, string> = {
 };
 
 export default function HistoryScreen() {
-  const [now] = useState(() => new Date());
+  const [now, setNow] = useState(() => new Date());
   const today = localDay(now);
-  const { medications, isLoading: medicationsLoading, loadError: medicationsError } = useMedicationRegistry();
+  const { isLoading: medicationsLoading, loadError: medicationsError } = useMedicationRegistry();
+  const { payments } = usePenalties();
   const [visibleMonth, setVisibleMonth] = useState(() => ({ year: now.getFullYear(), month: now.getMonth() }));
   const [selectedDay, setSelectedDay] = useState(today);
+  const [medications, setMedications] = useState<HistoricalMedication[]>([]);
   const [records, setRecords] = useState<DoseRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestVersion = useRef(0);
   const range = useMemo(() => monthRange(visibleMonth.year, visibleMonth.month), [visibleMonth]);
   const calendarDays = useMemo(() => monthCalendarDays(visibleMonth.year, visibleMonth.month), [visibleMonth]);
 
   const loadRecords = useCallback(async () => {
+    const version = ++requestVersion.current;
     setLoading(true);
     setError(null);
     try {
       const database = await getMedicationDatabase();
-      setRecords(await listDoseRecordsBetween(database, range.firstDay, range.lastDay));
+      const [savedRecords, schedules] = await Promise.all([
+        listDoseRecordsBetween(database, range.firstDay, range.lastDay), listMedicationSchedules(database),
+      ]);
+      if (version === requestVersion.current) { setRecords(savedRecords); setMedications(schedules); setNow(new Date()); }
     } catch {
-      setError('服薬履歴を読み込めませんでした。もう一度お試しください。');
+      if (version === requestVersion.current) setError('服薬履歴を読み込めませんでした。もう一度お試しください。');
     } finally {
-      setLoading(false);
+      if (version === requestVersion.current) setLoading(false);
     }
   }, [range.firstDay, range.lastDay]);
 
   useFocusEffect(useCallback(() => {
     void loadRecords();
+    return () => { requestVersion.current += 1; };
   }, [loadRecords]));
 
   const historyByDay = useMemo(() => new Map(calendarDays.flatMap((day) => (
-    day ? [[day, buildHistoryDay(day, medications, records, today)] as const] : []
-  ))), [calendarDays, medications, records, today]);
-  const selected = historyByDay.get(selectedDay) ?? buildHistoryDay(selectedDay, medications, records, today);
+    day ? [[day, buildHistoryDay(day, medications, records, today, payments)] as const] : []
+  ))), [calendarDays, medications, records, today, payments]);
+  const selected = historyByDay.get(selectedDay) ?? buildHistoryDay(selectedDay, medications, records, today, payments);
 
   const changeMonth = (offset: number) => {
     const date = new Date(visibleMonth.year, visibleMonth.month + offset, 1, 12);
@@ -130,6 +140,7 @@ export default function HistoryScreen() {
             <Text style={styles.note}>この日に登録されていた薬はありません。</Text>
           ) : selected.entries.map(({ medication, record }) => {
             const scheduledAt = scheduledDate(selectedDay, medication.doseTime);
+            const penalty = payments.find((payment) => payment.medicationId === medication.id && payment.scheduledDay === selectedDay);
             const missed = selectedDay < today && !record;
             const dueToday = selectedDay === today && scheduledAt.getTime() <= now.getTime() && !record;
             return (
@@ -138,8 +149,8 @@ export default function HistoryScreen() {
                   <Text style={styles.medicationTime}>{medication.doseTime}</Text>
                   <Text style={styles.medicationName}>{medication.name}</Text>
                 </View>
-                <Text style={[styles.recordStatus, (missed || dueToday) && styles.missed]}>
-                  {record ? `服用 ${formatTakenTime(record.takenAt)}${record.source === 'nfc' ? '（NFC）' : ''}` : missed || dueToday ? '未服用' : '予定'}
+                <Text style={[styles.recordStatus, (missed || dueToday || !!penalty) && styles.missed]}>
+                  {penalty ? `飲み忘れ\n${penalty.amount.toLocaleString()}円・${penalty.status === 'succeeded' ? 'テスト決済済み' : '決済失敗'}` : record ? `服用 ${formatTakenTime(record.takenAt)}${record.source === 'nfc' ? '（NFC）' : ''}` : missed || dueToday ? '未服用' : '予定'}
                 </Text>
               </View>
             );

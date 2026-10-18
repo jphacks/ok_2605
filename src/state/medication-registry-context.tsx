@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState, ty
 import { getMedicationDatabase } from '@/features/medications/database';
 import type { Medication, MedicationInput } from '@/features/medications/medication';
 import { listMedications, saveMedication } from '@/features/medications/medication-repository';
+import { archiveMedication, editMedication } from '@/features/medications/medication-lifecycle';
 
 type MedicationRegistry = {
   medications: Medication[];
@@ -10,6 +11,8 @@ type MedicationRegistry = {
   loadError: string | null;
   reloadMedications: () => Promise<void>;
   registerMedication: (input: MedicationInput) => Promise<Medication>;
+  updateMedication: (id: number, input: MedicationInput) => Promise<void>;
+  deleteMedication: (id: number) => Promise<void>;
 };
 
 const MedicationRegistryContext = createContext<MedicationRegistry | null>(null);
@@ -70,8 +73,28 @@ export function MedicationRegistryProvider({ children }: PropsWithChildren) {
     }
   };
 
+  const updateMedication = async (id: number, input: MedicationInput) => {
+    if (isSaving.current || isLoading || loadError) throw new Error('薬の情報を確認してから再試行してください。');
+    isSaving.current = true;
+    try {
+      const saved = await editMedication(await getMedicationDatabase(), id, input);
+      requestVersion.current += 1;
+      setMedications((current) => current.map((item) => item.id === id ? saved : item).sort((a, b) => a.doseTime.localeCompare(b.doseTime) || a.id - b.id));
+    } finally { isSaving.current = false; }
+  };
+
+  const deleteMedication = async (id: number) => {
+    if (isSaving.current || isLoading || loadError) throw new Error('薬の情報を確認してから再試行してください。');
+    isSaving.current = true;
+    try {
+      await archiveMedication(await getMedicationDatabase(), id);
+      requestVersion.current += 1;
+      setMedications((current) => current.filter((item) => item.id !== id));
+    } finally { isSaving.current = false; }
+  };
+
   return (
-    <MedicationRegistryContext.Provider value={{ medications, isLoading, loadError, reloadMedications, registerMedication }}>
+    <MedicationRegistryContext.Provider value={{ medications, isLoading, loadError, reloadMedications, registerMedication, updateMedication, deleteMedication }}>
       {children}
     </MedicationRegistryContext.Provider>
   );

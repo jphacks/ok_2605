@@ -11,7 +11,8 @@ export default function ExploreScreen() {
           ['/medications/new', '薬を登録する'],
           ['/', 'ホーム・今日の服薬'],
           ...(Platform.OS === 'android' ? [['/qr', '薬箱の設定・タグ変更']] as const : []),
-          ['/payments', 'ペナルティ課金（デモ）'],
+          ['/penalties', 'ペナルティ履歴'],
+          ...(__DEV__ ? [['/payments', '開発用・決済シミュレーター']] as const : []),
           ['/reminders', '服薬リマインダー'],
         ] as const).map(([href, label]) => (
           <Link key={href} href={href} asChild>
@@ -21,7 +22,7 @@ export default function ExploreScreen() {
           </Link>
         ))}
       </View>
-      <Text style={styles.note}>ご褒美の設定は今後追加します。</Text>
+      <Text style={styles.note}>ペナルティはテスト決済です。実際の請求はありません。</Text>
     </MedicationScreen>
   );
 }

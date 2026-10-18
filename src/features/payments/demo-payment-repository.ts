@@ -1,5 +1,6 @@
 import { MIN_PENALTY_AMOUNT, type Medication } from '../medications/medication.ts';
 import type { MedicationDatabase } from '../medications/medication-repository.ts';
+import { inTransaction } from '../medications/transaction.ts';
 import { hasDoseRecord } from '../medications/dose-record-repository.ts';
 import {
   DemoPaymentInputError, demoDeadline, isPenaltyDue, simulatePayment,
@@ -25,20 +26,8 @@ export function listDemoPaymentAttempts(db: MedicationDatabase): Promise<DemoPay
     FROM demo_payment_attempts ORDER BY id ASC`);
 }
 
-// Serialize requests sharing the app connection. DB uniqueness also protects separate connections.
-const queues = new WeakMap<DemoPaymentDatabase, Promise<void>>();
-async function exclusive<T>(db: DemoPaymentDatabase, task: (transaction: MedicationDatabase) => Promise<T>): Promise<T> {
-  const previous = queues.get(db) ?? Promise.resolve();
-  const work = previous.then(async () => {
-    let result: T | undefined;
-    await db.withExclusiveTransactionAsync(async (transaction) => { result = await task(transaction); });
-    return result as T;
-  });
-  const settled = work.then(() => undefined, () => undefined);
-  queues.set(db, settled);
-  try { return await work; }
-  finally { if (queues.get(db) === settled) queues.delete(db); }
-}
+// Share the foreground-write queue with QR, NFC, editing and automatic penalties.
+const exclusive = inTransaction;
 
 async function settle(transaction: MedicationDatabase, payment: DemoPayment, outcome: DemoOutcome): Promise<DemoPaymentResult> {
   if (payment.status === 'succeeded') return { kind: 'already-succeeded', payment };

@@ -5,7 +5,8 @@ import { Alert, AppState, Linking, Pressable, StyleSheet, Text, View } from 'rea
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { localDay } from '@/features/medications/dose-record';
-import { DEMO_QR_PAYLOAD } from '@/state/medication-state';
+import { getMedicationDatabase } from '@/features/medications/database';
+import { confirmQrDose } from './qr-confirmation';
 import { useDoseRecords } from '@/state/dose-record-context';
 import { useMedicationRegistry } from '@/state/medication-registry-context';
 
@@ -16,7 +17,7 @@ export default function QrScreen() {
   const today = localDay(new Date());
   const validOccurrence = Number.isSafeInteger(medicationId) && medicationId > 0 && params.scheduledDay === today;
   const { medications, isLoading: medicationsLoading } = useMedicationRegistry();
-  const { records, isLoading: recordsLoading, recordMedicationTaken } = useDoseRecords();
+  const { records, isLoading: recordsLoading, refresh } = useDoseRecords();
   const medication = medications.find((item) => item.id === medicationId);
   const alreadyTaken = records.some((record) => record.medicationId === medicationId && record.scheduledDay === today);
   const [permission, requestPermission, getPermission] = useCameraPermissions();
@@ -52,31 +53,22 @@ export default function QrScreen() {
     }
   }
 
-  async function complete(source: 'qr' | 'demo', data = DEMO_QR_PAYLOAD) {
+  async function complete(source: 'qr' | 'demo', data = '') {
     if (scanLocked.current || alreadyTaken || !medication || !validOccurrence || !visible.current) return;
     scanLocked.current = true;
     setScanned(true);
-    if (source === 'qr' && data !== DEMO_QR_PAYLOAD) {
-      Alert.alert('対象のお薬ではありません', 'デモ用のお薬QRコードを読み取ってください。', [{
-        text: 'もう一度読み取る',
-        onPress: () => { scanLocked.current = false; setScanned(false); },
-      }], { cancelable: false });
-      return;
-    }
     try {
-      await recordMedicationTaken(medication.id, source);
-      Alert.alert('服用を記録しました', `${medication.name}を今日の服薬済みとして保存しました。`, [
-        { text: 'ホームへ', onPress: goHome },
-      ], { cancelable: false });
-    } catch {
-      scanLocked.current = false;
-      setScanned(false);
-      Alert.alert('保存できませんでした', '服薬記録を保存できませんでした。もう一度お試しください。');
+      if (source === 'demo' && !__DEV__) throw new Error('開発用の操作は利用できません。');
+      const result = await confirmQrDose(await getMedicationDatabase(), medication.id, params.scheduledDay ?? '', data, new Date(), source === 'demo');
+      await refresh();
+      if (visible.current) router.replace({ pathname: '/dose-complete', params: { medicationName: result.medication.name, doseTime: result.medication.doseTime } });
+    } catch (cause) {
+      Alert.alert('服用を記録できませんでした', cause instanceof Error ? cause.message : '保存できませんでした。もう一度お試しください。', [{ text: '確認', onPress: () => { scanLocked.current = false; setScanned(false); } }], { cancelable: false });
     }
   }
 
   const cancel = <Pressable accessibilityRole="button" style={styles.cancelButton} onPress={goHome}><Text>ホームへ戻る</Text></Pressable>;
-  const demoButton = <Pressable accessibilityRole="button" style={styles.demoButton} onPress={() => void complete('demo')}><Text style={styles.demoButtonText}>デモ：ボタンで読み取り完了</Text></Pressable>;
+  const demoButton = __DEV__ && <Pressable accessibilityRole="button" style={styles.demoButton} onPress={() => void complete('demo')}><Text style={styles.demoButtonText}>デモ：ボタンで読み取り完了</Text></Pressable>;
 
   if (medicationsLoading || recordsLoading) return <SafeAreaView style={styles.center}><Text>服薬予定を確認しています…</Text>{cancel}</SafeAreaView>;
   if (!validOccurrence || !medication) return <SafeAreaView style={styles.center}><Text style={styles.title}>服薬予定が見つかりません</Text><Text style={styles.body}>ホーム画面から対象のお薬を選び直してください。</Text>{cancel}</SafeAreaView>;
@@ -115,7 +107,7 @@ export default function QrScreen() {
           onMountError={() => setCameraError(true)}
         />}
         <View pointerEvents="none" style={styles.frame} />
-        <Text style={styles.guide}>薬箱のQRコードを枠に合わせてください</Text>
+        <Text style={styles.guide}>対象のお薬のQRコードを枠に合わせてください</Text>
       </View>
       <View style={styles.bottom}>
         <Text style={styles.body}>{scanned ? '服薬記録を保存しています…' : `${medication.doseTime}の服薬予定`}</Text>

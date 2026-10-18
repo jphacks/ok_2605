@@ -1,5 +1,7 @@
-import { isLocalDay, localDay, type DoseRecord } from './dose-record.ts';
+import { isLocalDay, localDay, scheduledDate, type DoseRecord } from './dose-record.ts';
 import type { Medication } from './medication.ts';
+import type { HistoricalMedication } from './medication-lifecycle.ts';
+import type { PenaltyPayment } from '../payments/penalty-repository.ts';
 
 export type HistoryDayStatus = 'none' | 'future' | 'pending' | 'complete' | 'missed';
 
@@ -16,12 +18,34 @@ export function medicationStartDay(medication: Medication): string {
 
 export function buildHistoryDay(
   day: string,
-  medications: Medication[],
+  medications: HistoricalMedication[],
   records: DoseRecord[],
   today: string,
+  penalties: PenaltyPayment[] = [],
 ): HistoryDay {
   if (!isLocalDay(day) || !isLocalDay(today)) throw new Error('履歴の日付が正しくありません。');
-  const active = medications.filter((medication) => medicationStartDay(medication) <= day);
+  // Pick a schedule snapshot for this occurrence; current edits never rewrite older days.
+  const byId = new Map<number, HistoricalMedication>();
+  for (const medication of medications) {
+    const at = scheduledDate(day, medication.doseTime).getTime();
+    const started = new Date(medication.createdAt).getTime();
+    const ended = medication.endedAt ? new Date(medication.endedAt).getTime() : Infinity;
+    if (at >= started && at < ended) byId.set(medication.id, medication);
+  }
+  // Preserve a recorded dose even when an edit/deletion cancelled its original schedule.
+  for (const record of records.filter((item) => item.scheduledDay === day)) {
+    const original = medications.findLast((item) => item.id === record.medicationId
+      && new Date(item.createdAt).getTime() <= Date.parse(record.takenAt));
+    if (original) byId.set(original.id, original);
+  }
+  const missedPayments = penalties.filter((payment) => payment.scheduledDay === day);
+  for (const payment of missedPayments) {
+    const snapshot = medications.findLast((item) => item.id === payment.medicationId
+      && item.name === payment.medicationName && item.doseTime === payment.doseTime
+      && Date.parse(item.createdAt) <= scheduledDate(day, item.doseTime).getTime());
+    if (snapshot) byId.set(snapshot.id, snapshot);
+  }
+  const active = [...byId.values()].sort((a, b) => a.doseTime.localeCompare(b.doseTime) || a.id - b.id);
   const recordByMedication = new Map(
     records.filter((record) => record.scheduledDay === day).map((record) => [record.medicationId, record]),
   );
@@ -32,6 +56,7 @@ export function buildHistoryDay(
 
   let status: HistoryDayStatus;
   if (entries.length === 0) status = 'none';
+  else if (missedPayments.length) status = 'missed';
   else if (entries.every((entry) => entry.record)) status = 'complete';
   else if (day < today) status = 'missed';
   else if (day === today) status = 'pending';

@@ -9,7 +9,8 @@ import { buildDailySchedule, localDay, nextScheduledDose } from '@/features/medi
 import { useDoseRecords } from '@/state/dose-record-context';
 import { useMedicationRegistry } from '@/state/medication-registry-context';
 import { useNfcBox } from '@/state/nfc-box-context';
-import { demoDeadline } from '@/features/payments/demo-payment';
+import { doseDeadline } from '@/features/payments/penalty-repository';
+import { usePenalties } from '@/state/penalty-context';
 
 const C = { ink: '#263e48', muted: '#72848a', mint: '#36b7aa', pale: '#eef9fa', line: '#e5eeed', coral: '#e77760' };
 
@@ -23,12 +24,12 @@ export default function HomeScreen() {
   const { medications, isLoading: medicationsLoading, loadError: medicationsError } = useMedicationRegistry();
   const { day, records, isLoading: recordsLoading, loadError: recordsError, refresh } = useDoseRecords();
   const { box, loading: nfcLoading, error: nfcError, reload: reloadNfc } = useNfcBox();
+  const { error: penaltyError, refresh: refreshPenalties } = usePenalties();
   const android = Platform.OS === 'android';
   const [now, setNow] = useState(() => new Date());
   const schedule = useMemo(() => buildDailySchedule(medications, records, now), [medications, records, now]);
-  const actionableSchedule = useMemo(() => android
-    ? schedule.filter((item) => item.status !== 'due' || now.getTime() < demoDeadline(localDay(now), item.medication.doseTime).getTime())
-    : schedule, [android, schedule, now]);
+  const actionableSchedule = useMemo(() => schedule.filter((item) =>
+    item.status !== 'due' || now.getTime() < doseDeadline(localDay(now), item.medication.doseTime).getTime()), [schedule, now]);
   const next = useMemo(() => nextScheduledDose(actionableSchedule, medications, now), [actionableSchedule, medications, now]);
   const takenCount = schedule.filter((item) => item.status === 'taken').length;
   const loading = medicationsLoading || recordsLoading;
@@ -69,6 +70,10 @@ export default function HomeScreen() {
         <Text style={styles.helper}>“飲んで、今日もいい一日にしよう！”</Text>
 
         <MedicationRegistryStatus />
+        {!!penaltyError && <View style={styles.errorBox}>
+          <Text accessibilityRole="alert" style={styles.errorText}>{penaltyError}</Text>
+          <Pressable accessibilityRole="button" style={styles.retry} onPress={() => void refreshPenalties()}><Text style={styles.retryText}>飲み忘れを再確認</Text></Pressable>
+        </View>}
         {android && !nfcLoading && !box && (
           <View style={styles.emptyCard}>
             <Text style={styles.sectionTitle}>最初に薬箱を登録しましょう</Text>
@@ -129,7 +134,7 @@ export default function HomeScreen() {
               {schedule.map((item) => {
                 const isTaken = item.status === 'taken';
                 const isDue = item.status === 'due';
-                const expired = android && isDue && now.getTime() >= demoDeadline(day, item.medication.doseTime).getTime();
+                const expired = isDue && now.getTime() >= doseDeadline(day, item.medication.doseTime).getTime();
                 const canScan = isDue && !expired;
                 return (
                   <View key={item.medication.id} style={styles.medicationCard}>

@@ -35,6 +35,9 @@ export default function MedicationsScreen() {
               <View style={styles.divider} />
               <Text style={styles.helper}>ペナルティ設定額</Text>
               <Text style={styles.amount}>{medication.penaltyAmount.toLocaleString('ja-JP')}円</Text>
+              <Link href={{ pathname: '/medications/[id]', params: { id: String(medication.id) } }} asChild>
+                <Pressable accessibilityRole="button" style={styles.add}><Text style={styles.addText}>QRコード・編集 ›</Text></Pressable>
+              </Link>
               {medication.penaltyAmount < MIN_PENALTY_AMOUNT && <Text style={styles.helper}>最低金額の変更前に登録された設定です。</Text>}
             </View>
           ))}
