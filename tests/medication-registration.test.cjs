@@ -103,7 +103,7 @@ test('registered medicines survive a file database close and reopen and remain t
     database = createDatabase(file);
     await initializeMedicationDatabase(database.db);
     assert.deepEqual(await listMedications(database.db), [morning, sameTime, night]);
-    assert.deepEqual(await database.db.getFirstAsync('PRAGMA user_version'), { user_version: 8 });
+    assert.deepEqual(await database.db.getFirstAsync('PRAGMA user_version'), { user_version: 9 });
   } finally {
     database?.connection.close();
     await rm(directory, { recursive: true, force: true });
@@ -157,13 +157,13 @@ test('v6 databases gain the grace period and newer schemas remain untouched', as
   assert.deepEqual(await listMedications(db), [medication]);
   assert.deepEqual(await db.getFirstAsync('SELECT grace_minutes AS graceMinutes FROM medication_schedules'), { graceMinutes: 30 });
   assert.deepEqual(await db.getFirstAsync('SELECT grace_minutes AS graceMinutes FROM medication_groups'), { graceMinutes: 30 });
-  assert.deepEqual(await db.getFirstAsync('PRAGMA user_version'), { user_version: 8 });
+  assert.deepEqual(await db.getFirstAsync('PRAGMA user_version'), { user_version: 9 });
   await initializeMedicationDatabase(db);
   assert.deepEqual(await listMedications(db), [medication]);
-  await db.execAsync('PRAGMA user_version = 9;');
+  await db.execAsync('PRAGMA user_version = 10;');
   await assert.rejects(initializeMedicationDatabase(db), /新しいデータベース形式/);
   assert.deepEqual(await listMedications(db), [medication]);
-  assert.deepEqual(await db.getFirstAsync('PRAGMA user_version'), { user_version: 9 });
+  assert.deepEqual(await db.getFirstAsync('PRAGMA user_version'), { user_version: 10 });
 });
 
 test('repository validates independently and leaves no record after a failed insert', async (context) => {

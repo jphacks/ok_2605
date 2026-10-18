@@ -35,7 +35,7 @@ export default function MissedScreen() {
       <Text style={styles.kicker}>LET’S TRY AGAIN</Text>
       <BunnyArt />
       <Text accessibilityRole="header" style={styles.title}>{succeeded.length ? '課金されました' : failed.length ? '課金できませんでした' : '飲み忘れのお知らせ'}</Text>
-      <Text style={styles.copy}>{pending.length ? '服薬時刻から30分以内に\n服用の記録がなかった予定があります。' : loading ? '服薬状況を確認しています…' : '未確認のお知らせはありません。'}</Text>
+      <Text style={styles.copy}>{pending.length ? '設定した猶予を過ぎても\n服用の記録がなかった予定があります。' : loading ? '服薬状況を確認しています…' : '未確認のお知らせはありません。'}</Text>
       {pending.length > 0 && <View style={styles.card}>
         <Text style={styles.heading}>今回のペナルティ（テスト決済）</Text>
         <Text style={styles.amount}>¥{total.toLocaleString('ja-JP')}</Text>
@@ -43,7 +43,8 @@ export default function MissedScreen() {
         {pending.map((payment) => <View key={payment.id} style={styles.row}>
           <Text style={styles.heading}>{payment.medicationName}</Text>
           <Text style={styles.copy}>{payment.scheduledDay}　{payment.doseTime}</Text>
-          <Text style={payment.status === 'failed' ? styles.error : styles.copy}>{payment.amount.toLocaleString()}円 · {payment.status === 'succeeded' ? 'テスト決済済み' : '決済失敗（未課金）'}</Text>
+          <Text style={styles.copy}>確認期限：{new Date(payment.deadlineAt).toLocaleString('ja-JP')}</Text>
+          <Text style={payment.status === 'failed' ? styles.error : styles.copy}>{payment.amount.toLocaleString('ja-JP')}円 · {payment.status === 'succeeded' ? '課金されました（テスト）' : '決済失敗（未課金）'}</Text>
         </View>)}
         {failed.length > 0 && <Text style={styles.error}>失敗した{failed.length}件は課金されていません。設定の「ペナルティ履歴」から再試行できます。</Text>}
       </View>}

@@ -15,12 +15,13 @@ import { inTransaction, type TransactionDatabase } from './transaction.ts';
 import { scheduledDate } from './dose-record.ts';
 import { followingDay, validateMedicationPlan } from './medication-plan.ts';
 import { DEFAULT_GRACE_MINUTES } from './grace-period.ts';
+import { PAYMENT_SETUP_SCHEMA } from '../payments/payment-setup-repository.ts';
 
 type MedicationDatabaseValue = string | number | null;
 
 // Version 6 shipped the medication lifecycle and box tables. Version 7 adds
-// a per-medication grace period; version 8 adds early confirmation without rewriting existing deadlines.
-const MEDICATION_DATABASE_VERSION = 8;
+// a per-medication grace period; version 8 adds early confirmation, and version 9 persists onboarding and a dummy card.
+const MEDICATION_DATABASE_VERSION = 9;
 
 // Both expo-sqlite and the real SQLite test adapter implement this contract.
 export interface MedicationDatabase {
@@ -127,6 +128,7 @@ export async function initializeMedicationDatabase(db: MedicationDatabase): Prom
     }
     await db.execAsync(PENALTY_SCHEMA);
     await initializeMedicineBoxes(db);
+    await db.execAsync(PAYMENT_SETUP_SCHEMA);
     await db.execAsync(`PRAGMA user_version = ${MEDICATION_DATABASE_VERSION};`);
     await db.execAsync('COMMIT;');
   } catch (error) {
@@ -185,13 +187,16 @@ export async function saveMedicationPlan(db: TransactionDatabase, input: Medicat
   const { doses: parsedDoses, inventory, unit, memo, graceBeforeMinutes } = validateMedicationPlan(input);
 
   return inTransaction(db, async (transaction) => {
-    const startsAt = scheduledDate(input.startDay, '00:00').toISOString();
+    const createdAt = new Date().toISOString();
+    // A backdated period must not make already-passed dose times billable.
+    // Keep the actual registration time separate from a future period's start.
+    const startsAt = new Date(Math.max(Date.parse(createdAt), scheduledDate(input.startDay, '00:00').getTime())).toISOString();
     const saved: Medication[] = [];
     let groupId = 0;
     for (const dose of parsedDoses.sort((a, b) => a.doseTime.localeCompare(b.doseTime))) {
       const inserted = await transaction.runAsync(
         'INSERT INTO medications (name, dose_time, penalty_amount, created_at) VALUES (?, ?, ?, ?)',
-        dose.name, dose.doseTime, dose.penaltyAmount, startsAt,
+        dose.name, dose.doseTime, dose.penaltyAmount, createdAt,
       );
       const medicationId = inserted.lastInsertRowId;
       if (!groupId) {
@@ -199,7 +204,7 @@ export async function saveMedicationPlan(db: TransactionDatabase, input: Medicat
         await transaction.runAsync(`UPDATE medication_groups SET name = ?, unit = ?, inventory = ?, memo = ?,
           starts_on = ?, ends_on = ?, notifications_enabled = ?, grace_minutes = ?, grace_before_minutes = ?, is_plan = 1, created_at = ? WHERE id = ?`,
         dose.name, unit, inventory, memo, input.startDay, input.endDay,
-        input.notificationsEnabled ? 1 : 0, input.graceMinutes, graceBeforeMinutes, new Date().toISOString(), groupId);
+        input.notificationsEnabled ? 1 : 0, input.graceMinutes, graceBeforeMinutes, createdAt, groupId);
       } else {
         await transaction.runAsync('DELETE FROM medication_group_doses WHERE medication_id = ?', medicationId);
         await transaction.runAsync('DELETE FROM medication_groups WHERE id = ?', medicationId);
@@ -215,7 +220,7 @@ export async function saveMedicationPlan(db: TransactionDatabase, input: Medicat
       if (input.boxId !== undefined) await assignMedicineBox(transaction, medicationId, Number(input.boxId));
       saved.push({
         id: medicationId, name: dose.name, doseTime: dose.doseTime, penaltyAmount: dose.penaltyAmount,
-        createdAt: startsAt, groupId, doseAmount: dose.doseAmount, unit,
+        createdAt, groupId, doseAmount: dose.doseAmount, unit,
         activeStartDay: input.startDay, activeEndDay: input.endDay,
         notificationsEnabled: input.notificationsEnabled, graceMinutes: input.graceMinutes, graceBeforeMinutes,
       });

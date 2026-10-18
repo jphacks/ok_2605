@@ -8,6 +8,7 @@ export default function ExploreScreen() {
       <View style={styles.card}>
         {([
           ['/reminders', '通知設定'],
+          ['/payment-card', 'クレジットカード設定'],
           ['/penalties', 'ペナルティ・履歴'],
           ['/medications', 'お薬の管理'],
           ['/boxes', Platform.OS === 'android' ? '薬箱の管理・NFCタグ' : '薬箱の管理・共通QRコード'],
