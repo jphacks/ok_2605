@@ -18,6 +18,7 @@ export async function editMedication(db: TransactionDatabase, id: number, input:
   return inTransaction(db, async (transaction) => {
     const medication = await transaction.getFirstAsync<Medication>(`SELECT m.id, m.name, m.dose_time AS doseTime,
       m.penalty_amount AS penaltyAmount, m.created_at AS createdAt,
+      (SELECT s.starts_at FROM medication_schedules s WHERE s.medication_id = m.id ORDER BY s.id DESC LIMIT 1) AS scheduleStartsAt,
       COALESCE(g.grace_minutes, 30) AS graceMinutes, COALESCE(g.grace_before_minutes, 0) AS graceBeforeMinutes FROM medications m
       JOIN medication_details d ON d.medication_id = m.id
       LEFT JOIN medication_group_doses gd ON gd.medication_id = m.id
@@ -32,7 +33,7 @@ export async function editMedication(db: TransactionDatabase, id: number, input:
     await transaction.runAsync('UPDATE medications SET name = ?, dose_time = ?, penalty_amount = ? WHERE id = ?', name, doseTime, penaltyAmount, id);
     await transaction.runAsync(`INSERT INTO medication_schedules (medication_id, name, dose_time, penalty_amount, grace_minutes, grace_before_minutes, starts_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)`, id, name, doseTime, penaltyAmount, medication.graceMinutes ?? 30, medication.graceBeforeMinutes ?? 0, now.toISOString());
-    return { ...medication, name, doseTime, penaltyAmount };
+    return { ...medication, name, doseTime, penaltyAmount, scheduleStartsAt: now.toISOString() };
   });
 }
 

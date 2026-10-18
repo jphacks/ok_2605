@@ -13,7 +13,7 @@ import { medicationGraceMinutes } from '@/features/medications/grace-period';
 import { useDoseRecords } from '@/state/dose-record-context';
 import { useMedicationRegistry } from '@/state/medication-registry-context';
 import { useNfcBox } from '@/state/nfc-box-context';
-import { doseCountdown, doseDeadline, formatDoseCountdown } from '@/features/payments/penalty-repository';
+import { doseCountdown, doseDeadline, formatDoseCountdown, wasScheduledBeforeDose } from '@/features/payments/penalty-repository';
 import { usePenalties } from '@/state/penalty-context';
 
 function progressImage(progress: number) {
@@ -38,6 +38,7 @@ export default function HomeScreen() {
   const next = useMemo(() => nextScheduledDoseGroup(actionable, medications, boxes, now), [actionable, medications, boxes, now]);
   const groups = useMemo(() => groupScheduledDoses(schedule, boxes), [schedule, boxes]);
   const countdown = useMemo(() => next ? doseCountdown(next.medication, next.day, now) : null, [next, now]);
+  const chargeable = next ? wasScheduledBeforeDose(next.medication, next.day) : false;
   const nextBox = next ? boxes.find((box) => box.medications.some((medication) => medication.id === next.medication.id)) : undefined;
   const todaySchedule = schedule.filter((item) => item.scheduledDay === day);
   const taken = todaySchedule.filter((item) => item.status === 'taken').length;
@@ -72,10 +73,11 @@ export default function HomeScreen() {
         <Text style={styles.nextBox}>{nextBox?.name ?? '薬箱未選択'}</Text>
         <Text style={styles.countdown}>
           {countdown.phase === 'until-dose'
-            ? `受付開始まであと${formatDoseCountdown(countdown.remainingSeconds, false)}`
-            : `課金まであと${formatDoseCountdown(countdown.remainingSeconds, true)}`}
+            ? `投薬時刻まであと${formatDoseCountdown(countdown.remainingSeconds, false)}`
+            : `${chargeable ? '課金' : '受付終了'}まであと${formatDoseCountdown(countdown.remainingSeconds, true)}`}
         </Text>
-        {next.medications.length > 1 && <Text style={styles.note}>受付・課金までの時間は「{next.medication.name}」のものです。受付時間内のお薬をまとめて記録します。</Text>}
+        {countdown.phase === 'until-penalty' && !chargeable && <Text style={styles.note}>この予定は投薬時刻後に登録・変更されたため、テスト課金の対象外です。</Text>}
+        {next.medications.length > 1 && <Text style={styles.note}>表示中の残り時間は「{next.medication.name}」のものです。受付時間内のお薬をまとめて記録します。</Text>}
         {next.due && <Pressable accessibilityRole="button" style={styles.primary} onPress={() => openScanner(next.medication.id, next.day)}><Text style={styles.primaryText}>{next.medications.length > 1 ? 'まとめて服用を記録する' : android ? 'NFCで服用を記録する' : '共通QRで服用を記録する'}</Text></Pressable>}
       </View>}
       {!loading && !hasError && <View style={styles.summary}>

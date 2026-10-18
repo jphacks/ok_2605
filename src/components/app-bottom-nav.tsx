@@ -3,6 +3,7 @@ import { Image } from 'expo-image';
 import { createContext, useCallback, useContext, useEffect, useState, type PropsWithChildren } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { MedicineBoxIcon } from './medicine-box-icon';
 
 const tabs = [
   { title: 'ホーム', icon: require('../../assets/images/navigation/home.png'), href: '/' },
@@ -74,7 +75,9 @@ export function FixedBottomNav() {
             disabled={disabled}
             onPress={() => navigate(tab.href)}
             style={[styles.tab, selected && styles.selected]}>
-            <Image source={tab.icon} contentFit="contain" style={[styles.icon, !selected && styles.iconInactive]} />
+            {tab.title === '薬箱'
+              ? <View style={[styles.icon, !selected && styles.iconInactive]}><MedicineBoxIcon size={25} /></View>
+              : <Image source={tab.icon} contentFit="contain" style={[styles.icon, !selected && styles.iconInactive]} />}
             <Text style={[styles.label, selected && styles.active]}>{tab.title}</Text>
           </Pressable>
         );

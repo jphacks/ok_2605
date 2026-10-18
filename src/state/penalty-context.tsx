@@ -30,7 +30,8 @@ export function PenaltyProvider({ children }: PropsWithChildren) {
         const db = await getMedicationDatabase();
         const saved = await reconcilePenalties(db);
         if (mounted.current) { setPayments(saved); setError(null); }
-        await notifyPayments(saved);
+        // A delayed iOS notification must not hold up the next deadline check.
+        void notifyPayments(saved);
       } catch {
         if (mounted.current) setError('飲み忘れと決済結果を確認できませんでした。再読み込みしてください。');
       } finally { if (mounted.current) setLoading(false); }
@@ -50,7 +51,7 @@ export function PenaltyProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => { if (state === 'active') void refresh(); });
-    const timer = setInterval(() => { if (AppState.currentState === 'active') void refresh(); }, 15_000);
+    const timer = setInterval(() => { void refresh(); }, 15_000);
     return () => { subscription.remove(); clearInterval(timer); };
   }, [refresh]);
 

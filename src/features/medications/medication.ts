@@ -7,6 +7,7 @@ export type Medication = {
   doseTime: string;
   penaltyAmount: number;
   createdAt: string;
+  scheduleStartsAt?: string | null;
   groupId?: number;
   doseAmount?: number;
   unit?: string;
