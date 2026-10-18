@@ -1,6 +1,11 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { buildDailySchedule, localDay, nextScheduledDose } from '@/features/medications/dose-record';
+import { doseDeadline } from '@/features/payments/penalty-repository';
+import { useMedicationRegistry } from '@/state/medication-registry-context';
+import { useDoseRecords } from '@/state/dose-record-context';
 
 const C = { ink: '#263e48', muted: '#72848a', mint: '#36b7aa', pale: '#e8f7f4' };
 
@@ -12,11 +17,17 @@ export default function DoseCompleteScreen() {
     alreadyRecorded?: string;
   }>();
   const name = medicationName || 'お薬';
+  const { medications, isLoading, loadError } = useMedicationRegistry();
+  const { records, isLoading: recordsLoading, loadError: recordsError } = useDoseRecords();
+  const now = new Date();
+  const schedule = buildDailySchedule(medications, records, now).filter((item) =>
+    item.status !== 'due' || now.getTime() < doseDeadline(localDay(now), item.medication.doseTime).getTime());
+  const next = nextScheduledDose(schedule, medications, now);
 
   return (
     <SafeAreaView style={styles.safe}>
       <Stack.Screen options={{ gestureEnabled: false }} />
-      <View style={styles.content}>
+      <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.kicker}>MISSION COMPLETE</Text>
         <View style={styles.checkCircle}><Text style={styles.check}>✓</Text></View>
         <Text accessibilityRole="header" style={styles.title}>服用完了！</Text>
@@ -26,9 +37,16 @@ export default function DoseCompleteScreen() {
           {!!doseTime && <Text style={styles.time}>{doseTime}</Text>}
         </View>
         {alreadyRecorded === '1' && <Text style={styles.note}>この服用はすでに記録されていました。</Text>}
+        <View style={styles.nextCard}>
+          <Text style={styles.label}>次の服薬予定</Text>
+          {isLoading || recordsLoading ? <Text style={styles.note}>確認中…</Text> : loadError || recordsError ? <Text style={styles.note}>予定を読み込めませんでした。ホームで再確認してください。</Text> : next ? <>
+            <Text style={styles.name}>{next.medication.name}</Text>
+            <Text style={styles.time}>{next.day === localDay(now) ? '今日' : '明日'} {next.medication.doseTime}</Text>
+          </> : <Text style={styles.note}>次の服薬予定はありません。</Text>}
+        </View>
         <Text style={styles.bear} accessibilityLabel="よろこぶくま">🐻</Text>
         <Text style={styles.cheer}>今日もひとつ、よくできました！</Text>
-      </View>
+      </ScrollView>
       <View style={styles.footer}>
         <Pressable accessibilityRole="button" style={styles.button} onPress={() => router.dismissTo('/')}>
           <Text style={styles.buttonText}>ホームへ戻る</Text>
@@ -40,13 +58,14 @@ export default function DoseCompleteScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#f5faf8' },
-  content: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
+  content: { flexGrow: 1, paddingVertical: 24, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
   kicker: { color: '#5e9696', fontSize: 10, letterSpacing: 1.5 },
   checkCircle: { width: 92, height: 92, marginTop: 22, borderRadius: 46, backgroundColor: C.mint, alignItems: 'center', justifyContent: 'center', shadowColor: C.mint, shadowOpacity: 0.24, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 5 },
   check: { color: '#fff', fontSize: 49, fontWeight: '800' },
   title: { marginTop: 23, color: C.ink, fontSize: 30, lineHeight: 40, fontWeight: '800' },
   message: { marginTop: 10, color: C.muted, fontSize: 14, lineHeight: 24, textAlign: 'center' },
   recordCard: { width: '100%', marginTop: 28, padding: 18, borderRadius: 18, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5eeed', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  nextCard: { width: '100%', marginTop: 16, padding: 18, borderRadius: 18, backgroundColor: '#e8f7f4', gap: 6 },
   label: { color: C.muted, fontSize: 11 },
   name: { marginTop: 5, color: C.ink, fontSize: 15, fontWeight: '700' },
   time: { color: C.mint, fontSize: 23, fontWeight: '800', fontVariant: ['tabular-nums'] },

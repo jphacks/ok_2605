@@ -68,7 +68,7 @@ test('v1 migration preserves medication; repeated initialization preserves payme
  await initializeMedicationDatabase(db);
  assert.equal((await runDemoPayment(db,request)).kind,'already-succeeded');
  assert.equal((await listDemoPaymentAttempts(db)).length,1);
- assert.equal((await db.getFirstAsync('PRAGMA user_version')).user_version,4);
+ assert.equal((await db.getFirstAsync('PRAGMA user_version')).user_version,5);
 });
 
 test('file database reopening retains history and prevents another successful payment',async t=>{

@@ -4,6 +4,7 @@
   "main": "expo-router/entry",
   "dependencies": {
     "@expo/ui": "~57.0.25",
+    "@types/qrcode": "^1.5.6",
     "expo": "~57.0.0",
     "expo-camera": "~57.0.6",
     "expo-constants": "~57.0.22",
@@ -21,6 +22,7 @@
     "expo-symbols": "~57.0.3",
     "expo-system-ui": "~57.0.4",
     "expo-web-browser": "~57.0.3",
+    "qrcode": "^1.5.4",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
@@ -64,7 +66,9 @@
   "expo": {
     "autolinking": {
       "ios": {
-        "exclude": ["react-native-nfc-manager"]
+        "exclude": [
+          "react-native-nfc-manager"
+        ]
       }
     }
   }

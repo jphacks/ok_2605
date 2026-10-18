@@ -1,7 +1,9 @@
 import type { Medication } from '../medications/medication.ts';
 import type { MedicationDatabase } from '../medications/medication-repository.ts';
+import { inTransaction } from '../medications/transaction.ts';
 import { saveDoseRecord } from '../medications/dose-record-repository.ts';
-import { DEMO_GRACE_MINUTES, demoDeadline, localDay } from '../payments/demo-payment.ts';
+import { localDay } from '../medications/dose-record.ts';
+import { GRACE_MINUTES, doseDeadline } from '../payments/penalty-repository.ts';
 
 export interface NfcDatabase extends MedicationDatabase {
   withExclusiveTransactionAsync(task: (transaction: MedicationDatabase) => Promise<void>): Promise<void>;
@@ -24,7 +26,7 @@ const initialization = new WeakMap<NfcDatabase, Promise<void>>();
 export async function initializeNfcDatabase(db: NfcDatabase): Promise<void> {
   let work = initialization.get(db);
   if (!work) {
-    work = db.withExclusiveTransactionAsync(async (transaction) => {
+    work = inTransaction(db, async (transaction) => {
       await transaction.execAsync(`
         CREATE TABLE IF NOT EXISTS nfc_box (
           id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -66,6 +68,7 @@ async function readBox(db: MedicationDatabase): Promise<NfcBox | null> {
   const medications = await db.getAllAsync<Medication>(`
     SELECT m.id, m.name, m.dose_time AS doseTime, m.penalty_amount AS penaltyAmount, m.created_at AS createdAt
     FROM medications m JOIN nfc_box_medications b ON b.medication_id = m.id
+    WHERE m.id IN (SELECT medication_id FROM medication_details WHERE archived_at IS NULL)
     ORDER BY m.dose_time, m.id
   `);
   return { tagId: box.tagId, medications };
@@ -91,8 +94,8 @@ export function pendingNfcDoses(box: NfcBox | null, now: Date): NfcDose[] {
   yesterday.setDate(yesterday.getDate() - 1);
   const days = [localDay(yesterday), localDay(now)];
   return box.medications.flatMap((medication) => days.flatMap((day) => {
-    const deadline = demoDeadline(day, medication.doseTime);
-    const start = deadline.getTime() - DEMO_GRACE_MINUTES * 60_000;
+    const deadline = doseDeadline(day, medication.doseTime);
+    const start = deadline.getTime() - GRACE_MINUTES * 60_000;
     return now.getTime() >= start && now.getTime() < deadline.getTime()
       ? [{ medication, day, deadline }] : [];
   }));
@@ -102,7 +105,7 @@ export async function saveNfcBox(db: NfcDatabase, tagId: string, signal: AbortSi
   if (!/^(?:[0-9A-F]{2}){1,32}$/.test(tagId)) throw new Error('タグIDを読み取り直してください。');
   await initializeNfcDatabase(db);
   let linkedMedicationCount = 0;
-  await db.withExclusiveTransactionAsync(async (transaction) => {
+  await inTransaction(db, async (transaction) => {
     if (signal.aborted) throw new Error('登録を中止しました。');
     await transaction.runAsync(`INSERT INTO nfc_box (id, tag_uid, updated_at) VALUES (1, ?, ?)
       ON CONFLICT(id) DO UPDATE SET tag_uid = excluded.tag_uid, updated_at = excluded.updated_at`, tagId, new Date().toISOString());
@@ -118,7 +121,7 @@ export async function saveNfcBox(db: NfcDatabase, tagId: string, signal: AbortSi
 export async function confirmNfcDoses(db: NfcDatabase, tagId: string, signal: AbortSignal) {
   await initializeNfcDatabase(db);
   let result = { recorded: 0, alreadyRecorded: 0, names: [] as string[] };
-  await db.withExclusiveTransactionAsync(async (transaction) => {
+  await inTransaction(db, async (transaction) => {
     if (signal.aborted) throw new Error('読み取りを中止しました。');
     const box = await readBox(transaction);
     if (!box || tagId !== box.tagId) throw new Error('登録した薬箱のタグではありません。薬箱のタグを確認してください。');
@@ -155,7 +158,7 @@ export async function confirmNfcDose(
   }
   await initializeNfcDatabase(db);
   let result = { recorded: false, medicationName: '', confirmedAt: '' };
-  await db.withExclusiveTransactionAsync(async (transaction) => {
+  await inTransaction(db, async (transaction) => {
     if (signal.aborted) throw new Error('読み取りを中止しました。');
     const box = await readBox(transaction);
     if (!box || tagId !== box.tagId) throw new Error('登録した薬箱のタグではありません。薬箱のタグを確認してください。');

@@ -1,5 +1,7 @@
 import { DEMO_PAYMENT_SCHEMA } from '../payments/demo-payment-schema.ts';
 import { initializeDoseRecordSchema } from './dose-record-schema.ts';
+import { MEDICATION_LIFECYCLE_SCHEMA } from './medication-lifecycle-schema.ts';
+import { PENALTY_SCHEMA } from '../payments/penalty-schema.ts';
 import {
   MIN_PENALTY_AMOUNT,
   MedicationValidationError,
@@ -23,7 +25,7 @@ export interface MedicationDatabase {
 
 export async function initializeMedicationDatabase(db: MedicationDatabase): Promise<void> {
   const version = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
-  if ((version?.user_version ?? 0) > 4) {
+  if ((version?.user_version ?? 0) > 5) {
     throw new Error('このアプリより新しいデータベース形式です。');
   }
 
@@ -63,7 +65,9 @@ export async function initializeMedicationDatabase(db: MedicationDatabase): Prom
     `);
     await db.execAsync(DEMO_PAYMENT_SCHEMA);
     await initializeDoseRecordSchema(db, version?.user_version ?? 0);
-    await db.execAsync('PRAGMA user_version = 4;');
+    await db.execAsync(MEDICATION_LIFECYCLE_SCHEMA);
+    await db.execAsync(PENALTY_SCHEMA);
+    await db.execAsync('PRAGMA user_version = 5;');
     await db.execAsync('COMMIT;');
   } catch (error) {
     await db.execAsync('ROLLBACK;');
@@ -75,6 +79,7 @@ export async function listMedications(db: MedicationDatabase): Promise<Medicatio
   return db.getAllAsync<Medication>(`
     SELECT id, name, dose_time AS doseTime, penalty_amount AS penaltyAmount, created_at AS createdAt
     FROM medications
+    WHERE id IN (SELECT medication_id FROM medication_details WHERE archived_at IS NULL)
     ORDER BY dose_time ASC, id ASC
   `);
 }
