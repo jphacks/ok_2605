@@ -1,64 +1,90 @@
 import { isMedicationActiveOnDay, type Medication } from '../medications/medication.ts';
-import { localDay } from '../medications/dose-record.ts';
+import { localDay, scheduledDate, type DoseRecord } from '../medications/dose-record.ts';
+import { doseDeadline, type PenaltyPayment } from '../payments/penalty-repository.ts';
 
 export const REMINDER_KIND = 'medication-reminder';
 export const REMINDER_PREFIX = 'nomupay:reminder:';
-// Leave room for other notifications in iOS's pending notification queue.
 export const MAX_REMINDERS = 60;
+export const REMINDER_DAYS = 7;
+export const NOTIFICATION_PATTERNS = [
+  { value: 'before-dose', label: '服用10分前' },
+  { value: 'before-penalty', label: '課金10分前' },
+  { value: 'charged', label: '課金完了' },
+] as const;
+export type NotificationPattern = typeof NOTIFICATION_PATTERNS[number]['value'];
 
 export function reminderMedicationId(data: Record<string, unknown> | undefined): number | null {
   const id = data?.medicationId;
   return data?.kind === REMINDER_KIND && typeof id === 'number' && Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
-export function reminderRequest(medication: Medication) {
-  const [hour, minute] = medication.doseTime.split(':').map(Number);
+export function notificationContent(pattern: NotificationPattern, medication: Pick<Medication, 'id' | 'name' | 'doseTime' | 'penaltyAmount'>, day: string, demo = false) {
+  const title = pattern === 'before-dose' ? '服用時間の10分前です' : pattern === 'before-penalty' ? '課金予定の10分前です' : 'テスト決済が完了しました';
+  const body = pattern === 'before-dose' ? `${medication.name}：${medication.doseTime}に服用予定です。`
+    : pattern === 'before-penalty' ? `${medication.name}：未服用のままだと10分後に${medication.penaltyAmount}円のテスト決済が行われます。`
+      : `${medication.name}：${medication.penaltyAmount}円のテスト決済が完了しました。実際の請求はありません。`;
   return {
-    identifier: `${REMINDER_PREFIX}${medication.id}`,
-    content: {
-      title: 'のむペイ｜おくすりの時間です',
-      body: `${medication.name}：${medication.doseTime}の服用時間です。`,
-      sound: 'default',
-      data: { kind: REMINDER_KIND, medicationId: medication.id, doseTime: medication.doseTime, version: 1 },
-    },
-    trigger: { type: 'daily' as const, hour, minute },
+    title: `${demo ? '【デモ】' : ''}のむペイ｜${title}`, body, sound: 'default',
+    data: { kind: REMINDER_KIND, pattern, medicationId: medication.id, scheduledDay: day, demo, version: 2 },
   };
 }
 
-export type PendingReminder = {
-  identifier: string;
-  content: { title?: string | null; body?: string | null; data?: Record<string, unknown> };
-};
+export function paymentNotificationContent(payment: PenaltyPayment) {
+  return notificationContent('charged', { id: payment.medicationId, name: payment.medicationName, doseTime: payment.doseTime, penaltyAmount: payment.amount }, payment.scheduledDay);
+}
+
+export function reminderRequest(medication: Medication, day: string, pattern: 'before-dose' | 'before-penalty') {
+  const at = pattern === 'before-dose' ? scheduledDate(day, medication.doseTime) : doseDeadline(day, medication.doseTime, medication.graceMinutes);
+  const date = new Date(at.getTime() - 10 * 60_000);
+  const content = notificationContent(pattern, medication, day);
+  return {
+    identifier: `${REMINDER_PREFIX}${medication.id}:${day}:${pattern}`,
+    content: { ...content, data: { ...content.data, fireAt: date.toISOString() } },
+    trigger: { type: 'date' as const, date },
+  };
+}
+
+export type PendingReminder = { identifier: string; content: { title?: string | null; body?: string | null; data?: Record<string, unknown> } };
 export type ReminderScheduler = {
   list: () => Promise<PendingReminder[]>;
   cancel: (id: string) => Promise<void>;
   schedule: (request: ReturnType<typeof reminderRequest>) => Promise<unknown>;
 };
 
-export async function reconcileReminders(medications: Medication[], scheduler: ReminderScheduler) {
-  const today = localDay(new Date());
-  medications = medications.filter((medication) => medication.notificationsEnabled !== false && isMedicationActiveOnDay(medication, today));
+export async function reconcileReminders(medications: Medication[], scheduler: ReminderScheduler, records: DoseRecord[] = [], now = new Date()) {
+  const desired: ReturnType<typeof reminderRequest>[] = [];
+  const taken = new Set(records.map((record) => `${record.medicationId}:${record.scheduledDay}`));
+  for (let offset = -1; offset <= REMINDER_DAYS; offset++) {
+    const day = localDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset, 12));
+    for (const medication of medications) {
+      if (medication.notificationsEnabled === false || !isMedicationActiveOnDay(medication, day) || taken.has(`${medication.id}:${day}`)) continue;
+      if (scheduledDate(day, medication.doseTime).getTime() < Date.parse(medication.createdAt)) continue;
+      for (const pattern of ['before-dose', 'before-penalty'] as const) {
+        const request = reminderRequest(medication, day, pattern);
+        if (request.trigger.date.getTime() > now.getTime()) desired.push(request);
+      }
+    }
+  }
+  desired.sort((a, b) => a.trigger.date.getTime() - b.trigger.date.getTime() || a.identifier.localeCompare(b.identifier));
   const pending = await scheduler.list();
   const otherCount = pending.filter((item) => !item.identifier.startsWith(REMINDER_PREFIX)).length;
-  if (medications.length + otherCount > MAX_REMINDERS) {
-    throw new Error('通知の予約上限を超えています。服薬通知を含む予約は60件までです。');
-  }
-  const desired = medications.map(reminderRequest);
-  const wanted = new Set(desired.map((item) => item.identifier));
+  const capacity = Math.max(0, MAX_REMINDERS - otherCount);
+  // Replenish nearest dated occurrences on foreground and after a dose.
+  const selected = desired.slice(0, capacity);
+  const wanted = new Set(selected.map((item) => item.identifier));
   for (const item of pending) {
     if (item.identifier.startsWith(REMINDER_PREFIX) && !wanted.has(item.identifier)) await scheduler.cancel(item.identifier);
   }
-  for (const request of desired) {
+  if (!capacity && desired.length) throw new Error('通知の予約上限（60件）に達しています。');
+  for (const request of selected) {
     const existing = pending.find((item) => item.identifier === request.identifier);
     if (existing?.content.title === request.content.title && existing.content.body === request.content.body
-      && existing.content.data?.version === 1 && existing.content.data?.doseTime === request.content.data.doseTime
-      && reminderMedicationId(existing.content.data) === request.content.data.medicationId) continue;
-    // The stable identifier replaces an existing request instead of duplicating it.
+      && existing.content.data?.fireAt === request.content.data.fireAt && existing.content.data?.version === 2) continue;
     await scheduler.schedule(request);
   }
   const confirmed = await scheduler.list();
-  if (desired.some((request) => !confirmed.some((item) => item.identifier === request.identifier && item.content.body === request.content.body))) {
+  if (selected.some((request) => !confirmed.some((item) => item.identifier === request.identifier && item.content.body === request.content.body && item.content.data?.fireAt === request.content.data.fireAt))) {
     throw new Error('一部の通知を予約できませんでした。再試行してください。');
   }
-  return desired.length;
+  return selected.length;
 }

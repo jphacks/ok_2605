@@ -4,6 +4,7 @@ import { getMedicationDatabase } from '@/features/medications/database';
 import { acknowledgePenalties, reconcilePenalties, retryPenaltyPayment, type PenaltyPayment } from '@/features/payments/penalty-repository';
 import { useMedicationRegistry } from './medication-registry-context';
 import { useDoseRecords } from './dose-record-context';
+import { useReminders } from './reminder-context';
 
 type PenaltyState = {
   payments: PenaltyPayment[]; pending: PenaltyPayment[]; loading: boolean; error: string | null;
@@ -14,6 +15,7 @@ const Context = createContext<PenaltyState | null>(null);
 export function PenaltyProvider({ children }: PropsWithChildren) {
   const { medications, isLoading, loadError } = useMedicationRegistry();
   const { records } = useDoseRecords();
+  const { notifyPayments } = useReminders();
   const [payments, setPayments] = useState<PenaltyPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,13 +30,14 @@ export function PenaltyProvider({ children }: PropsWithChildren) {
         const db = await getMedicationDatabase();
         const saved = await reconcilePenalties(db);
         if (mounted.current) { setPayments(saved); setError(null); }
+        await notifyPayments(saved);
       } catch {
         if (mounted.current) setError('飲み忘れと決済結果を確認できませんでした。再読み込みしてください。');
       } finally { if (mounted.current) setLoading(false); }
     });
     queue.current = work;
     return work;
-  }, []);
+  }, [notifyPayments]);
 
   useEffect(() => {
     mounted.current = true;
@@ -63,7 +66,9 @@ export function PenaltyProvider({ children }: PropsWithChildren) {
   };
   const retry = async (id: number) => {
     const work = queue.current.then(async () => {
-      setPayments(await retryPenaltyPayment(await getMedicationDatabase(), id));
+      const saved = await retryPenaltyPayment(await getMedicationDatabase(), id);
+      setPayments(saved);
+      await notifyPayments(saved);
     });
     queue.current = work.catch(() => undefined);
     await work;
