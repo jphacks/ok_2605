@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "expo-medication-app",
+    "name": "のむペイ",
     "slug": "expo-medication-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -16,6 +16,7 @@
       "bundleIdentifier": "jp.jphacks.ok2605"
     },
     "android": {
+      "blockedPermissions": ["android.permission.CAMERA", "android.permission.RECORD_AUDIO"],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -35,7 +36,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#fff9f6",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }

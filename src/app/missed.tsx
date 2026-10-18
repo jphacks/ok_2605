@@ -4,6 +4,7 @@ import { BackHandler, Pressable, ScrollView, StyleSheet, Text, View } from 'reac
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { medicationColors as C } from '@/components/medication-screen';
 import { usePenalties } from '@/state/penalty-context';
+import { BunnyArt } from '@/components/nomupay-art';
 
 export default function MissedScreen() {
   const { pending, acknowledge, loading, error: loadError, refresh } = usePenalties();
@@ -32,7 +33,7 @@ export default function MissedScreen() {
     <Stack.Screen options={{ gestureEnabled: false }} />
     <ScrollView contentContainerStyle={styles.content}>
       <Text style={styles.kicker}>LET’S TRY AGAIN</Text>
-      <Text style={styles.bear} accessibilityLabel="応援するくま">🐻</Text>
+      <BunnyArt />
       <Text accessibilityRole="header" style={styles.title}>{succeeded.length ? '課金されました' : failed.length ? '課金できませんでした' : '飲み忘れのお知らせ'}</Text>
       <Text style={styles.copy}>{pending.length ? '服薬時刻から30分以内に\n服用の記録がなかった予定があります。' : loading ? '服薬状況を確認しています…' : '未確認のお知らせはありません。'}</Text>
       {pending.length > 0 && <View style={styles.card}>
@@ -48,7 +49,7 @@ export default function MissedScreen() {
       </View>}
       {!!(error || loadError) && <Text accessibilityRole="alert" style={styles.error}>{error || loadError}</Text>}
       {!!loadError && <Pressable accessibilityRole="button" onPress={() => void refresh()} style={styles.button}><Text style={styles.buttonText}>再読み込み</Text></Pressable>}
-      <Text style={styles.copy}>次の約束につなげよう。{ '\n' }くまも一緒に応援しているよ。</Text>
+      <Text style={styles.copy}>次の約束につなげよう。{ '\n' }のむペイも一緒に応援しているよ。</Text>
       <Pressable accessibilityRole="button" disabled={busy || loading} onPress={() => void confirm()} style={[styles.button, busy && styles.disabled]}><Text style={styles.buttonText}>{busy ? '保存中…' : '確認してホームへ'}</Text></Pressable>
     </ScrollView>
   </SafeAreaView>;
@@ -56,7 +57,7 @@ export default function MissedScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.background },
   content: { padding: 24, paddingVertical: 40, gap: 20, alignItems: 'center' },
-  kicker: { fontSize: 10, letterSpacing: 1.5, color: '#5e9696' },
+  kicker: { fontSize: 10, letterSpacing: 1.5, color: '#d98a9b' },
   title: { fontSize: 27, fontWeight: '800', color: C.ink, textAlign: 'center' },
   bear: { fontSize: 90 },
   card: { width: '100%', backgroundColor: '#fff', borderRadius: 20, padding: 20, gap: 16 },

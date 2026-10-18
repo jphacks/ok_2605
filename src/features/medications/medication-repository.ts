@@ -2,6 +2,7 @@ import { DEMO_PAYMENT_SCHEMA } from '../payments/demo-payment-schema.ts';
 import { initializeDoseRecordSchema } from './dose-record-schema.ts';
 import { MEDICATION_LIFECYCLE_SCHEMA } from './medication-lifecycle-schema.ts';
 import { PENALTY_SCHEMA } from '../payments/penalty-schema.ts';
+import { initializeMedicineBoxes } from '../boxes/medicine-box-repository.ts';
 import {
   MIN_PENALTY_AMOUNT,
   MedicationValidationError,
@@ -11,6 +12,11 @@ import {
 } from './medication.ts';
 
 type MedicationDatabaseValue = string | number | null;
+
+// Version 6 was already shipped to iOS with the medication grace-period/box
+// columns. The current repositories do not depend on those columns, but they
+// are additive and must remain readable when an existing installation starts.
+const MEDICATION_DATABASE_VERSION = 6;
 
 // Both expo-sqlite and the real SQLite test adapter implement this contract.
 export interface MedicationDatabase {
@@ -25,7 +31,7 @@ export interface MedicationDatabase {
 
 export async function initializeMedicationDatabase(db: MedicationDatabase): Promise<void> {
   const version = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
-  if ((version?.user_version ?? 0) > 5) {
+  if ((version?.user_version ?? 0) > MEDICATION_DATABASE_VERSION) {
     throw new Error('このアプリより新しいデータベース形式です。');
   }
 
@@ -67,7 +73,8 @@ export async function initializeMedicationDatabase(db: MedicationDatabase): Prom
     await initializeDoseRecordSchema(db, version?.user_version ?? 0);
     await db.execAsync(MEDICATION_LIFECYCLE_SCHEMA);
     await db.execAsync(PENALTY_SCHEMA);
-    await db.execAsync('PRAGMA user_version = 5;');
+    await initializeMedicineBoxes(db);
+    await db.execAsync(`PRAGMA user_version = ${MEDICATION_DATABASE_VERSION};`);
     await db.execAsync('COMMIT;');
   } catch (error) {
     await db.execAsync('ROLLBACK;');

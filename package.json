@@ -65,6 +65,9 @@
   "private": true,
   "expo": {
     "autolinking": {
+      "android": {
+        "exclude": ["expo-camera"]
+      },
       "ios": {
         "exclude": [
           "react-native-nfc-manager"

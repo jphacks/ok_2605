@@ -5,19 +5,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppBottomNav } from './app-bottom-nav';
 
 export const medicationColors = {
-  background: '#f4f9f8',
-  ink: '#263e48',
-  muted: '#72848a',
-  mint: '#36b7aa',
-  pale: '#eef4f3',
-  line: '#e5eeed',
+  background: '#fff9f6',
+  ink: '#3b3439',
+  muted: '#93858a',
+  mint: '#f56889',
+  pale: '#fff0f2',
+  line: '#f2e4e4',
   error: '#aa353c',
 };
 
 type MedicationScreenProps = PropsWithChildren<{
   title: string;
   description: string;
-  backTo?: '/' | '/medications' | '/explore';
+  backTo?: '/' | '/medications' | '/explore' | '/boxes';
   busy?: boolean;
 }>;
 
@@ -49,12 +49,12 @@ export function MedicationScreen({ title, description, backTo = '/', busy = fals
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: medicationColors.background },
-  content: { paddingHorizontal: 24, paddingTop: 18, paddingBottom: 24 },
-  header: { minHeight: 48, backgroundColor: '#f3fafb', paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  content: { paddingHorizontal: 24, paddingTop: 12, paddingBottom: 32, width: '100%', maxWidth: 560, alignSelf: 'center' },
+  header: { minHeight: 54, backgroundColor: medicationColors.background, paddingHorizontal: 15, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   headerSpace: { width: 44 },
   back: { minHeight: 44, width: 44, justifyContent: 'center', alignItems: 'center' },
   backText: { fontSize: 28, color: medicationColors.ink },
-  title: { flex: 1, textAlign: 'center', fontSize: 13, color: medicationColors.ink, fontWeight: '600' },
+  title: { flex: 1, textAlign: 'center', fontSize: 16, color: medicationColors.ink, fontWeight: '700' },
   description: { color: medicationColors.muted, fontSize: 12, lineHeight: 23, marginTop: 12 },
   body: { marginTop: 22, gap: 16 },
 });

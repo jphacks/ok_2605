@@ -107,7 +107,7 @@ export default function QrScreen() {
           onMountError={() => setCameraError(true)}
         />}
         <View pointerEvents="none" style={styles.frame} />
-        <Text style={styles.guide}>対象のお薬のQRコードを枠に合わせてください</Text>
+        <Text style={styles.guide}>この端末の共通QRコードを枠に合わせてください</Text>
       </View>
       <View style={styles.bottom}>
         <Text style={styles.body}>{scanned ? '服薬記録を保存しています…' : `${medication.doseTime}の服薬予定`}</Text>
@@ -119,16 +119,16 @@ export default function QrScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f5faf8' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 28, gap: 18, backgroundColor: '#f5faf8' },
-  title: { fontSize: 22, fontWeight: '700', textAlign: 'center', color: '#263e48' },
-  body: { fontSize: 13, lineHeight: 22, textAlign: 'center', color: '#72848a' },
-  primary: { backgroundColor: '#36b7aa', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 28 },
+  safe: { flex: 1, backgroundColor: '#fff9f6' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 28, gap: 18, backgroundColor: '#fff9f6' },
+  title: { fontSize: 22, fontWeight: '700', textAlign: 'center', color: '#3b3439' },
+  body: { fontSize: 13, lineHeight: 22, textAlign: 'center', color: '#93858a' },
+  primary: { backgroundColor: '#f56889', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 28 },
   primaryText: { color: '#fff', fontWeight: '700' },
-  demoButton: { borderRadius: 14, borderWidth: 1, borderColor: '#36b7aa', backgroundColor: '#e9f8f5', padding: 13, width: '100%', alignItems: 'center' },
-  demoButtonText: { color: '#267f7b', fontSize: 12, fontWeight: '700' },
-  headerTitle: { fontWeight: '700', fontSize: 16, color: '#263e48', textAlign: 'center', padding: 16 },
-  cameraWrap: { flex: 1, marginHorizontal: 20, borderRadius: 22, overflow: 'hidden', backgroundColor: '#263e48', justifyContent: 'center', alignItems: 'center' },
+  demoButton: { borderRadius: 14, borderWidth: 1, borderColor: '#f56889', backgroundColor: '#e9f8f5', padding: 13, width: '100%', alignItems: 'center' },
+  demoButtonText: { color: '#c65876', fontSize: 12, fontWeight: '700' },
+  headerTitle: { fontWeight: '700', fontSize: 16, color: '#3b3439', textAlign: 'center', padding: 16 },
+  cameraWrap: { flex: 1, marginHorizontal: 20, borderRadius: 22, overflow: 'hidden', backgroundColor: '#3b3439', justifyContent: 'center', alignItems: 'center' },
   frame: { width: '72%', aspectRatio: 1, borderWidth: 3, borderColor: '#fff', borderRadius: 20 },
   guide: { position: 'absolute', bottom: 18, color: '#fff', fontSize: 12, textAlign: 'center', paddingHorizontal: 12 },
   bottom: { alignItems: 'center', padding: 20, gap: 14 },

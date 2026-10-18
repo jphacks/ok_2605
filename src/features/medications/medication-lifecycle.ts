@@ -2,6 +2,7 @@ import { inTransaction, type TransactionDatabase } from './transaction.ts';
 import type { MedicationDatabase } from './medication-repository.ts';
 import { MedicationValidationError, validateMedicationInput, type Medication, type MedicationInput } from './medication.ts';
 import { reconcileInTransaction } from '../payments/penalty-repository.ts';
+import { assignMedicineBox } from '../boxes/medicine-box-repository.ts';
 
 export type HistoricalMedication = Medication & { endedAt?: string | null };
 
@@ -19,6 +20,7 @@ export async function editMedication(db: TransactionDatabase, id: number, input:
       m.penalty_amount AS penaltyAmount, m.created_at AS createdAt FROM medications m
       JOIN medication_details d ON d.medication_id = m.id WHERE m.id = ? AND d.archived_at IS NULL`, id);
     if (!medication) throw new Error('登録された薬が見つかりません。');
+    if (input.boxId !== undefined) await assignMedicineBox(transaction, id, Number(input.boxId));
     const { name, doseTime, penaltyAmount } = parsed.value;
     if (name === medication.name && doseTime === medication.doseTime && penaltyAmount === medication.penaltyAmount) return medication;
     await reconcileInTransaction(transaction, now);
@@ -36,10 +38,4 @@ export async function archiveMedication(db: TransactionDatabase, id: number, now
     await transaction.runAsync('UPDATE medication_details SET archived_at = ? WHERE medication_id = ? AND archived_at IS NULL', now.toISOString(), id);
     await transaction.runAsync('UPDATE medication_schedules SET ends_at = ? WHERE medication_id = ? AND ends_at IS NULL', now.toISOString(), id);
   });
-}
-
-export async function medicationQrPayload(db: MedicationDatabase, id: number): Promise<string> {
-  const detail = await db.getFirstAsync<{ token: string }>('SELECT qr_token AS token FROM medication_details WHERE medication_id = ? AND archived_at IS NULL', id);
-  if (!detail) throw new Error('登録された薬が見つかりません。');
-  return `nomupay:medication:v1:${detail.token}`;
 }

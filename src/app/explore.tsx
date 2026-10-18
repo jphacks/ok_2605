@@ -4,24 +4,26 @@ import { MedicationScreen, medicationColors as C } from '@/components/medication
 
 export default function ExploreScreen() {
   return (
-    <MedicationScreen title="設定" description="あなたに合った続け方を。">
+    <MedicationScreen title="設定" description="あなたに合った、続けやすい毎日へ。">
       <View style={styles.card}>
         {([
-          ['/medications', 'お薬・服用スケジュール'],
-          ['/medications/new', '薬を登録する'],
-          ['/', 'ホーム・今日の服薬'],
-          ...(Platform.OS === 'android' ? [['/qr', '薬箱の設定・タグ変更']] as const : []),
-          ['/penalties', 'ペナルティ履歴'],
+          ['/reminders', '通知設定'],
+          ['/penalties', 'ペナルティ・履歴'],
+          ['/medications', 'お薬の管理'],
+          ['/boxes', Platform.OS === 'android' ? '薬箱の管理・NFCタグ' : '薬箱の管理・共通QRコード'],
+          ['/history', '服薬カレンダー'],
           ...(__DEV__ ? [['/payments', '開発用・決済シミュレーター']] as const : []),
-          ['/reminders', '服薬リマインダー'],
-        ] as const).map(([href, label]) => (
+        ] as const).map(([href, label], index) => (
           <Link key={href} href={href} asChild>
             <Pressable accessibilityRole="button" style={styles.row}>
+              <View style={[styles.icon, { backgroundColor: ['#b8a4ee', '#f58fa6', '#f8ad8f', '#88c9c0', '#8fb6d1'][index % 5] }]}><Text style={styles.symbol}>{['♧', '¥', '✚', '▣', '▦'][index % 5]}</Text></View>
               <Text style={styles.label}>{label}</Text><Text style={styles.arrow}>›</Text>
             </Pressable>
           </Link>
         ))}
       </View>
+      <Text style={styles.brand}>のむペイ</Text>
+      <Text style={styles.tagline}>飲めた、が増える毎日に。</Text>
       <Text style={styles.note}>ペナルティはテスト決済です。実際の請求はありません。</Text>
     </MedicationScreen>
   );
@@ -29,8 +31,12 @@ export default function ExploreScreen() {
 
 const styles = StyleSheet.create({
   card: { backgroundColor: '#fff', borderRadius: 20, paddingHorizontal: 20 },
-  row: { minHeight: 60, paddingVertical: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: C.line },
-  label: { color: C.ink, fontSize: 13 },
+  row: { minHeight: 74, gap: 12, paddingVertical: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: C.line },
+  label: { color: C.ink, fontSize: 13, flex: 1 },
+  icon: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  symbol: { color: '#fff', fontSize: 19 },
+  brand: { color: C.mint, fontSize: 24, fontWeight: '800', textAlign: 'center', marginTop: 24 },
+  tagline: { color: C.muted, textAlign: 'center', fontSize: 12 },
   arrow: { color: '#6d9196', fontSize: 22 },
   note: { fontSize: 11, lineHeight: 21, color: C.muted },
 });
