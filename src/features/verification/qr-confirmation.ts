@@ -1,7 +1,7 @@
 import { nearbyScheduledDays } from '../medications/dose-record.ts';
 import { saveDoseRecord } from '../medications/dose-record-repository.ts';
-import { deviceQrPayload } from '../boxes/medicine-box-repository.ts';
-import type { Medication } from '../medications/medication.ts';
+import { deviceQrPayload, listMedicineBoxes } from '../boxes/medicine-box-repository.ts';
+import { isMedicationActiveOnDay, type Medication } from '../medications/medication.ts';
 import { inTransaction, type TransactionDatabase } from '../medications/transaction.ts';
 import { doseDeadline, doseStartsAt } from '../payments/penalty-repository.ts';
 import { medicationGraceMinutes, medicationGraceBeforeMinutes } from '../medications/grace-period.ts';
@@ -23,6 +23,15 @@ export async function confirmQrDose(db: TransactionDatabase, medicationId: numbe
     if (now.getTime() < scheduledAt.getTime()) throw new Error('設定した前の猶予の開始時刻から記録できます。');
     if (now.getTime() >= doseDeadline(day, medication.doseTime, medicationGraceMinutes(medication.graceMinutes)).getTime()) throw new Error('服薬確認の期限を過ぎました。ホームで飲み忘れの結果を確認してください。');
     const record = await saveDoseRecord(transaction, medicationId, day, demo ? 'demo' : 'qr', now.toISOString());
-    return { record, medication };
+    const boxes = await listMedicineBoxes(transaction);
+    const box = boxes.find((box) => box.medications.some((member) => member.id === medicationId));
+    const members = box ? box.medications.filter((member) => member.doseTime === medication.doseTime
+      && isMedicationActiveOnDay(member, day)
+      && now.getTime() >= doseStartsAt(day, member.doseTime, medicationGraceBeforeMinutes(member.graceBeforeMinutes)).getTime()
+      && now.getTime() < doseDeadline(day, member.doseTime, medicationGraceMinutes(member.graceMinutes)).getTime()) : [medication];
+    for (const member of members) {
+      if (member.id !== medicationId) await saveDoseRecord(transaction, member.id, day, demo ? 'demo' : 'qr', now.toISOString());
+    }
+    return { record, medication, medications: members };
   });
 }
