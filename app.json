@@ -16,6 +16,7 @@
       "bundleIdentifier": "jp.jphacks.ok2605"
     },
     "android": {
+      "versionCode": 2,
       "blockedPermissions": ["android.permission.CAMERA", "android.permission.RECORD_AUDIO"],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",

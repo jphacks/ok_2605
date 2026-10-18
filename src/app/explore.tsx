@@ -13,8 +13,8 @@ export default function ExploreScreen() {
           ['/medications', 'お薬の管理'],
           ['/boxes', Platform.OS === 'android' ? '薬箱の管理・NFCタグ' : '薬箱の管理・共通QRコード'],
           ['/history', '服薬カレンダー'],
-          ...(__DEV__ ? [['/missed?demo=1', 'デモ：ペナルティ発生画面'] ] as const : []),
-          ...(__DEV__ ? [['/payments', '開発用・決済シミュレーター']] as const : []),
+          ['/missed?demo=1', 'デモ：ペナルティ発生画面'],
+          ['/payments', '開発用・決済シミュレーター'],
         ] as const).map(([href, label], index) => (
           <Link key={href} href={href} asChild>
             <Pressable accessibilityRole="button" style={styles.row}>
