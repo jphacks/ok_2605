@@ -4,6 +4,7 @@ import { AppState, Platform, Pressable, ScrollView, StyleSheet, Text, View } fro
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { AppBottomNav } from '@/components/app-bottom-nav';
+import { MedicineBoxIcon } from '@/components/medicine-box-icon';
 import { MedicationRegistryStatus } from '@/components/medication-registry-status';
 import { medicationColors as C } from '@/components/medication-screen';
 import { buildDailySchedule, localDay } from '@/features/medications/dose-record';
@@ -61,7 +62,7 @@ export default function HomeScreen() {
     <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.topRow}>
         <Text style={styles.date}>{now.getMonth() + 1}月{now.getDate()}日（{'日月火水木金土'[now.getDay()]}）</Text>
-        <Pressable accessibilityRole="button" accessibilityLabel="薬箱を開く" onPress={() => router.push('/boxes')} style={styles.boxShortcut}><Text style={styles.boxIcon}>▣</Text></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="薬箱を開く" onPress={() => router.push('/boxes')} style={styles.boxShortcut}><MedicineBoxIcon size={30} /></Pressable>
       </View>
       <MedicationRegistryStatus />
       {!loading && !hasError && next && countdown && countdown.phase !== 'expired' && <View style={[styles.nextCard, next.due && styles.nextCardDue]}>
@@ -102,7 +103,7 @@ export default function HomeScreen() {
       {!boxesLoading && !boxesError && !boxes.length && <View style={styles.card}>
         <Text style={styles.sectionTitle}>はじめに、薬箱を登録しましょう</Text>
         <Text style={styles.note}>お薬を入れる場所を決めて、毎日の服薬をはじめましょう。</Text>
-        <Pressable accessibilityRole="button" style={styles.primary} onPress={() => router.push('/boxes/new')}><Text style={styles.primaryText}>＋ 薬箱を登録する</Text></Pressable>
+        <Pressable accessibilityRole="button" style={styles.primary} onPress={() => router.push('/boxes/new')}><View style={styles.buttonContent}><MedicineBoxIcon size={24} /><Text style={styles.primaryText}>＋ 薬箱を登録する</Text></View></Pressable>
       </View>}
       {!loading && !hasError && !medications.length && boxes.length > 0 && <View style={styles.card}>
         <Text style={styles.sectionTitle}>いつものお薬を登録しましょう</Text><Text style={styles.note}>お薬と服用時間を登録すると、ここに今日の予定が表示されます。</Text>
@@ -141,7 +142,8 @@ const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: C.background }, date: { color: C.muted, fontSize: 12, fontWeight: '600' },
   content: { padding: 24, paddingTop: 10, gap: 16, width: '100%', maxWidth: 560, alignSelf: 'center' },
   topRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, note: { fontSize: 12, color: C.muted, lineHeight: 22 },
-  boxShortcut: { width: 44, height: 44, backgroundColor: C.pale, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }, boxIcon: { color: C.mint, fontSize: 26 },
+  boxShortcut: { width: 44, height: 44, backgroundColor: C.pale, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  buttonContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   nextCard: { padding: 22, gap: 7, borderRadius: 24, backgroundColor: '#fff', borderWidth: 2, borderColor: C.mint },
   nextCardDue: { backgroundColor: C.pale }, nextLabel: { color: C.mint, fontSize: 13, fontWeight: '800' },
   nextName: { color: C.ink, fontSize: 24, lineHeight: 32, fontWeight: '800' }, nextSchedule: { color: C.ink, fontSize: 16, fontWeight: '700', fontVariant: ['tabular-nums'] },
