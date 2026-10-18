@@ -1,4 +1,5 @@
-import type { Medication } from '../medications/medication.ts';
+import { isMedicationActiveOnDay, type Medication } from '../medications/medication.ts';
+import { localDay } from '../medications/dose-record.ts';
 
 export const REMINDER_KIND = 'medication-reminder';
 export const REMINDER_PREFIX = 'nomupay:reminder:';
@@ -35,6 +36,8 @@ export type ReminderScheduler = {
 };
 
 export async function reconcileReminders(medications: Medication[], scheduler: ReminderScheduler) {
+  const today = localDay(new Date());
+  medications = medications.filter((medication) => medication.notificationsEnabled !== false && isMedicationActiveOnDay(medication, today));
   const pending = await scheduler.list();
   const otherCount = pending.filter((item) => !item.identifier.startsWith(REMINDER_PREFIX)).length;
   if (medications.length + otherCount > MAX_REMINDERS) {

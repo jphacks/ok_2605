@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type PropsWithChildren } from 'react';
 
 import { getMedicationDatabase } from '@/features/medications/database';
-import type { Medication, MedicationInput } from '@/features/medications/medication';
-import { listMedications, saveMedication } from '@/features/medications/medication-repository';
+import type { Medication, MedicationInput, MedicationPlanInput } from '@/features/medications/medication';
+import { listMedications, saveMedication, saveMedicationPlan } from '@/features/medications/medication-repository';
 import { archiveMedication, editMedication } from '@/features/medications/medication-lifecycle';
 import { assignMedicineBox } from '@/features/boxes/medicine-box-repository';
 import { inTransaction } from '@/features/medications/transaction';
@@ -13,6 +13,7 @@ type MedicationRegistry = {
   loadError: string | null;
   reloadMedications: () => Promise<void>;
   registerMedication: (input: MedicationInput) => Promise<Medication>;
+  registerMedicationPlan: (input: MedicationPlanInput) => Promise<Medication[]>;
   updateMedication: (id: number, input: MedicationInput) => Promise<void>;
   deleteMedication: (id: number) => Promise<void>;
 };
@@ -79,6 +80,24 @@ export function MedicationRegistryProvider({ children }: PropsWithChildren) {
     }
   };
 
+  const registerMedicationPlan = async (input: MedicationPlanInput) => {
+    if (isLoading || loadError) throw new Error('薬の情報を読み込んでからお試しください。');
+    if (isSaving.current) throw new Error('登録処理中です。');
+    isSaving.current = true;
+    try {
+      const saved = await saveMedicationPlan(await getMedicationDatabase(), input);
+      requestVersion.current += 1;
+      setIsLoading(false);
+      setLoadError(null);
+      setMedications((current) => [...current, ...saved].sort((a, b) => (
+        a.doseTime.localeCompare(b.doseTime) || a.id - b.id
+      )));
+      return saved;
+    } finally {
+      isSaving.current = false;
+    }
+  };
+
   const updateMedication = async (id: number, input: MedicationInput) => {
     if (isSaving.current || isLoading || loadError) throw new Error('薬の情報を確認してから再試行してください。');
     isSaving.current = true;
@@ -100,7 +119,7 @@ export function MedicationRegistryProvider({ children }: PropsWithChildren) {
   };
 
   return (
-    <MedicationRegistryContext.Provider value={{ medications, isLoading, loadError, reloadMedications, registerMedication, updateMedication, deleteMedication }}>
+    <MedicationRegistryContext.Provider value={{ medications, isLoading, loadError, reloadMedications, registerMedication, registerMedicationPlan, updateMedication, deleteMedication }}>
       {children}
     </MedicationRegistryContext.Provider>
   );

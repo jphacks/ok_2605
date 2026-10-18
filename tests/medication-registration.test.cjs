@@ -12,6 +12,7 @@ const {
   initializeMedicationDatabase,
   listMedications,
   saveMedication,
+  saveMedicationPlan,
 } = require('../src/features/medications/medication-repository.ts');
 
 const validInput = { name: '朝のお薬', doseTime: '08:00', penaltyAmount: '100' };
@@ -32,6 +33,11 @@ function createDatabase(path = ':memory:') {
     async getFirstAsync(source, ...params) {
       const row = connection.prepare(source).get(...params);
       return row ? { ...row } : null;
+    },
+    async withExclusiveTransactionAsync(task) {
+      connection.exec('BEGIN IMMEDIATE');
+      try { await task(db); connection.exec('COMMIT'); }
+      catch (error) { connection.exec('ROLLBACK'); throw error; }
     },
   };
   return { connection, db };
@@ -201,4 +207,35 @@ test('applying the new minimum preserves older records without raising their amo
   await assert.rejects(saveMedication(db, { ...validInput, penaltyAmount: '99' }));
   const saved = await saveMedication(db, validInput);
   assert.equal(saved.penaltyAmount, 100);
+});
+
+test('one medication plan links every dose time and stores its inclusive period', async (context) => {
+  const { connection, db } = createDatabase();
+  context.after(() => connection.close());
+  await initializeMedicationDatabase(db);
+  const saved = await saveMedicationPlan(db, {
+    name: '朝夜の薬',
+    doses: [
+      { doseTime: '20:00', doseAmount: '2' },
+      { doseTime: '08:00', doseAmount: '1' },
+    ],
+    penaltyAmount: '300',
+    startDay: '2026-10-20',
+    endDay: '2026-11-18',
+    notificationsEnabled: true,
+    unit: '錠',
+    inventory: '90',
+    memo: '食後',
+  });
+  assert.equal(saved.length, 2);
+  assert.deepEqual(saved.map((item) => item.doseTime), ['08:00', '20:00']);
+  assert.equal(saved[0].groupId, saved[1].groupId);
+  assert.deepEqual(await listMedications(db), saved);
+  const schedules = await db.getAllAsync(`SELECT medication_id AS medicationId, starts_at AS startsAt, ends_at AS endsAt
+    FROM medication_schedules ORDER BY medication_id`);
+  assert.equal(schedules.length, 2);
+  assert.ok(schedules.every((item) => item.startsAt === '2026-10-19T15:00:00.000Z'));
+  assert.deepEqual(schedules.map((item) => item.endsAt), ['2026-11-18T23:00:00.000Z', '2026-11-19T11:00:00.000Z']);
+  const groups = await db.getAllAsync('SELECT id, inventory, memo FROM medication_groups WHERE is_plan = 1');
+  assert.deepEqual(groups, [{ id: saved[0].groupId, inventory: 90, memo: '食後' }]);
 });

@@ -58,11 +58,11 @@ export default function HomeScreen() {
       {!loading && !hasError && <View style={styles.summary}>
         <View style={styles.progressGroup}>
           <Text style={styles.sectionTitle}>今日の服薬</Text>
-          <View accessible accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: Math.max(1, medications.length), now: taken }} accessibilityLabel={'今日の服薬、' + medications.length + '件中' + taken + '件完了'} style={styles.ring}>
-            <Image source={{ uri: progressImage(medications.length ? taken / medications.length : 0) }} style={StyleSheet.absoluteFill} />
-            <Text style={styles.progressText}>{taken}<Text style={styles.progressTotal}>/{medications.length}</Text></Text>
+          <View accessible accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: Math.max(1, schedule.length), now: taken }} accessibilityLabel={'今日の服薬、' + schedule.length + '件中' + taken + '件完了'} style={styles.ring}>
+            <Image source={{ uri: progressImage(schedule.length ? taken / schedule.length : 0) }} style={StyleSheet.absoluteFill} />
+            <Text style={styles.progressText}>{taken}<Text style={styles.progressTotal}>/{schedule.length}</Text></Text>
           </View>
-          <Text style={styles.progressCaption}>{medications.length > 0 && taken === medications.length ? '今日の服薬はすべて完了！' : 'できた、を重ねよう。'}</Text>
+          <Text style={styles.progressCaption}>{schedule.length > 0 && taken === schedule.length ? '今日の服薬はすべて完了！' : 'できた、を重ねよう。'}</Text>
         </View>
         <View style={styles.bunny}><BunnyArt /></View>
       </View>}
@@ -78,7 +78,7 @@ export default function HomeScreen() {
         <Text style={styles.sectionTitle}>いつものお薬を登録しましょう</Text><Text style={styles.note}>お薬と服用時間を登録すると、ここに今日の予定が表示されます。</Text>
         <Pressable accessibilityRole="button" style={styles.primary} onPress={() => router.push('/medications/new')}><Text style={styles.primaryText}>＋ お薬を登録する</Text></Pressable>
       </View>}
-      {!loading && !hasError && medications.length > 0 && <>
+      {!loading && !hasError && schedule.length > 0 && <>
         <View style={styles.sectionRow}><Text style={styles.sectionTitle}>今日のお薬</Text><Pressable accessibilityRole="button" onPress={() => router.push('/history')} style={styles.historyLink}><Text style={styles.link}>履歴を見る ›</Text></Pressable></View>
         <View style={styles.list}>
           {schedule.map((item) => {
