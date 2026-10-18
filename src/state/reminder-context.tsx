@@ -72,7 +72,7 @@ export function ReminderProvider({ children }: PropsWithChildren) {
           }),
         }, savedRecords, now);
         const quiet = permission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
-        setMessage(count ? `服用10分前・課金10分前の通知を${count}件予約しました。${quiet ? '現在は通知センターのみへの静かな通知です。' : ''}` : '現在予約できる通知はありません。薬の登録と通知設定をご確認ください。');
+        setMessage(count ? `服用10分前・服用時刻・課金10分前の通知を${count}件予約しました。${quiet ? '現在は通知センターのみへの静かな通知です。' : ''}` : '現在予約できる通知はありません。薬の登録と通知設定をご確認ください。');
       } catch (cause) {
         setMessage('通知の予約を確認できませんでした。');
         setError(cause instanceof Error ? cause.message : '通知を設定できませんでした。再試行してください。');

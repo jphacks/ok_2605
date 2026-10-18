@@ -1,6 +1,7 @@
 import { Link } from 'expo-router';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { MedicationScreen, medicationColors as C } from '@/components/medication-screen';
+import { MedicineBoxIcon } from '@/components/medicine-box-icon';
 
 export default function ExploreScreen() {
   return (
@@ -13,12 +14,12 @@ export default function ExploreScreen() {
           ['/medications', 'お薬の管理'],
           ['/boxes', Platform.OS === 'android' ? '薬箱の管理・NFCタグ' : '薬箱の管理・共通QRコード'],
           ['/history', '服薬カレンダー'],
-          ['/missed?demo=1', 'デモ：ペナルティ発生画面'],
-          ['/payments', '開発用・決済シミュレーター'],
+          ...(__DEV__ ? [['/missed?demo=1', 'デモ：ペナルティ発生画面'] ] as const : []),
+          ...(__DEV__ ? [['/payments', '開発用・決済シミュレーター']] as const : []),
         ] as const).map(([href, label], index) => (
           <Link key={href} href={href} asChild>
             <Pressable accessibilityRole="button" style={styles.row}>
-              <View style={[styles.icon, { backgroundColor: ['#b8a4ee', '#f58fa6', '#f8ad8f', '#88c9c0', '#8fb6d1'][index % 5] }]}><Text style={styles.symbol}>{['♧', '¥', '✚', '▣', '▦'][index % 5]}</Text></View>
+              {href === '/boxes' ? <MedicineBoxIcon size={30} /> : <View style={[styles.icon, { backgroundColor: ['#b8a4ee', '#f58fa6', '#f8ad8f', '#88c9c0', '#8fb6d1'][index % 5] }]}><Text style={styles.symbol}>{['♧', '¥', '✚', '▣', '▦'][index % 5]}</Text></View>}
               <Text style={styles.label}>{label}</Text><Text style={styles.arrow}>›</Text>
             </Pressable>
           </Link>
