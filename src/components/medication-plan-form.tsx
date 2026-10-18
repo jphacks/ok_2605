@@ -304,6 +304,7 @@ export function MedicationPlanForm({ medicationId, initialValue }: { medicationI
             <Text style={styles.unitText}>円</Text>
           </View>
           <Text style={styles.hint}>{MIN_PENALTY_AMOUNT}円以上の整数を入力してください。</Text>
+          {!editing && <Text style={styles.hint}>登録時点ですでに過ぎている服用時刻には課金しません。登録後に来る予定から対象になります。</Text>}
           {!!errors.penaltyAmount && <Text accessibilityRole="alert" style={styles.error}>{errors.penaltyAmount}</Text>}
         </View>
 

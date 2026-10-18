@@ -1,4 +1,3 @@
-import { router, usePathname, useRootNavigationState } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type PropsWithChildren } from 'react';
 import { AppState } from 'react-native';
 import { getMedicationDatabase } from '@/features/medications/database';
@@ -20,8 +19,6 @@ export function PenaltyProvider({ children }: PropsWithChildren) {
   const [error, setError] = useState<string | null>(null);
   const queue = useRef<Promise<void>>(Promise.resolve());
   const mounted = useRef(true);
-  const pathname = usePathname();
-  const navigation = useRootNavigationState();
   const pending = payments.filter((payment) => !payment.acknowledgedAt);
 
   const refresh = useCallback(() => {
@@ -53,10 +50,6 @@ export function PenaltyProvider({ children }: PropsWithChildren) {
     const timer = setInterval(() => { if (AppState.currentState === 'active') void refresh(); }, 15_000);
     return () => { subscription.remove(); clearInterval(timer); };
   }, [refresh]);
-
-  useEffect(() => {
-    if (navigation?.key && !loading && pending.length && pathname !== '/missed') router.push('/missed');
-  }, [navigation?.key, loading, pending.length, pathname]);
 
   const acknowledge = async (ids: number[]) => {
     // Queue behind in-flight foreground checks so stale results cannot restore an acknowledged notice.

@@ -8,7 +8,7 @@ import { readNfcTag } from '@/features/nfc/nfc-reader.android';
 import { useNfcBox } from '@/state/nfc-box-context';
 import { medicationColors as C } from './medication-screen';
 
-export function BoxTagButton({ boxId, registered }: { boxId: number; registered: boolean }) {
+export function BoxTagButton({ boxId, registered, onBusyChange }: { boxId: number; registered: boolean; onBusyChange?: (busy: boolean) => void }) {
   const { reload } = useNfcBox();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -27,6 +27,7 @@ export function BoxTagButton({ boxId, registered }: { boxId: number; registered:
     if (controller.current) return;
     const request = new AbortController();
     controller.current = request;
+    onBusyChange?.(true);
     setBusy(true); setError(''); setMessage('薬箱のNFCタグにスマホの背面を近づけてください。');
     try {
       const tag = await readNfcTag(request.signal);
@@ -42,6 +43,7 @@ export function BoxTagButton({ boxId, registered }: { boxId: number; registered:
     } finally {
       controller.current = null;
       setBusy(false);
+      onBusyChange?.(false);
     }
   }
   return <View style={{ gap: 12 }}>

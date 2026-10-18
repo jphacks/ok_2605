@@ -1,4 +1,5 @@
-import { Stack } from 'expo-router';
+import { AppNavigation } from '@/components/app-navigation';
+import { PaymentSetupProvider } from '@/state/payment-setup-context';
 import { MedicationRegistryProvider } from '@/state/medication-registry-context';
 import { DoseRecordProvider } from '@/state/dose-record-context';
 import { ReminderProvider } from '@/state/reminder-context';
@@ -11,9 +12,11 @@ export default function RootLayout() {
       <DoseRecordProvider>
         <NfcBoxProvider>
           <ReminderProvider>
-            <PenaltyProvider>
-              <Stack screenOptions={{ headerShown: false }} />
-            </PenaltyProvider>
+            <PaymentSetupProvider>
+              <PenaltyProvider>
+                <AppNavigation />
+              </PenaltyProvider>
+            </PaymentSetupProvider>
           </ReminderProvider>
         </NfcBoxProvider>
       </DoseRecordProvider>
