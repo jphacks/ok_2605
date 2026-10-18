@@ -4,7 +4,6 @@ import { AppState, Platform, Pressable, ScrollView, StyleSheet, Text, View } fro
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { AppBottomNav } from '@/components/app-bottom-nav';
-import { BunnyArt } from '@/components/nomupay-art';
 import { MedicationRegistryStatus } from '@/components/medication-registry-status';
 import { medicationColors as C } from '@/components/medication-screen';
 import { buildDailySchedule, localDay } from '@/features/medications/dose-record';
@@ -87,7 +86,15 @@ export default function HomeScreen() {
           </View>
           <Text style={styles.progressCaption}>{todaySchedule.length > 0 && taken === todaySchedule.length ? '今日の服薬はすべて完了！' : 'できた、を重ねよう。'}</Text>
         </View>
-        <View style={styles.bunny}><BunnyArt /></View>
+        <View style={styles.bunny}>
+          <Image
+            accessible
+            accessibilityLabel="のむペイのうさぎ"
+            source={require('../../assets/images/nomupay-bunny.png')}
+            contentFit="contain"
+            style={styles.bunnyImage}
+          />
+        </View>
       </View>}
       {!!recordsError && <View style={styles.card}><Text accessibilityRole="alert" style={styles.error}>{recordsError}</Text><Pressable style={styles.secondary} onPress={() => void refresh()}><Text style={styles.link}>もう一度読み込む</Text></Pressable></View>}
       {!!penaltyError && <View style={styles.card}><Text accessibilityRole="alert" style={styles.error}>{penaltyError}</Text><Pressable style={styles.secondary} onPress={() => void refreshPenalties()}><Text style={styles.link}>飲み忘れを再確認</Text></Pressable></View>}
@@ -141,6 +148,7 @@ const styles = StyleSheet.create({
   nextBox: { color: C.muted, fontSize: 11 }, countdown: { marginTop: 5, color: C.mint, fontSize: 21, fontWeight: '800', fontVariant: ['tabular-nums'] },
   summary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', paddingVertical: 12 }, progressGroup: { alignItems: 'center', flex: 1 },
   bunny: { flex: 1, alignItems: 'center', overflow: 'hidden' }, ring: { width: 128, height: 128, justifyContent: 'center', alignItems: 'center', marginTop: 8 },
+  bunnyImage: { width: '100%', maxWidth: 180, aspectRatio: 1278 / 1230 },
   progressText: { color: C.ink, fontSize: 36, fontWeight: '700' }, progressTotal: { color: C.muted, fontSize: 22, fontWeight: '400' }, progressCaption: { color: C.muted, fontSize: 10, marginTop: 6 },
   card: { borderRadius: 22, padding: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: C.line, gap: 10 }, sectionTitle: { color: C.ink, fontSize: 14, fontWeight: '700' },
   sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, historyLink: { minHeight: 44, justifyContent: 'center' },
