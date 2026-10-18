@@ -2,7 +2,9 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { buildDailySchedule, localDay, nextScheduledDose } from '@/features/medications/dose-record';
+import { buildDailySchedule, localDay } from '@/features/medications/dose-record';
+import { nextScheduledDoseGroup } from '@/features/medications/dose-groups';
+import { useNfcBox } from '@/state/nfc-box-context';
 import { doseDeadline } from '@/features/payments/penalty-repository';
 import { medicationGraceMinutes } from '@/features/medications/grace-period';
 import { useMedicationRegistry } from '@/state/medication-registry-context';
@@ -21,12 +23,13 @@ export default function DoseCompleteScreen() {
   const name = medicationName || 'お薬';
   const { medications, isLoading, loadError } = useMedicationRegistry();
   const { records, isLoading: recordsLoading, loadError: recordsError } = useDoseRecords();
+  const { boxes } = useNfcBox();
   const now = new Date();
   const schedule = buildDailySchedule(medications, records, now).filter((item) =>
     item.status !== 'due' || now.getTime() < doseDeadline(
       item.scheduledDay, item.medication.doseTime, medicationGraceMinutes(item.medication.graceMinutes),
     ).getTime());
-  const next = nextScheduledDose(schedule, medications, now);
+  const next = nextScheduledDoseGroup(schedule, medications, boxes, now);
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -44,8 +47,9 @@ export default function DoseCompleteScreen() {
         <View style={styles.nextCard}>
           <Text style={styles.label}>次の服薬予定</Text>
           {isLoading || recordsLoading ? <Text style={styles.note}>確認中…</Text> : loadError || recordsError ? <Text style={styles.note}>予定を読み込めませんでした。ホームで再確認してください。</Text> : next ? <>
-            <Text style={styles.name}>{next.medication.name}</Text>
-            <Text style={styles.time}>{next.day === localDay(now) ? '今日' : '明日'} {next.medication.doseTime}</Text>
+            <Text style={styles.name}>{next.medications.map((medication) => medication.name).join('・')}</Text>
+            <Text style={styles.time}>{next.day === localDay(now) ? '今日' : `${Number(next.day.slice(5, 7))}月${Number(next.day.slice(8))}日`} {next.medication.doseTime}</Text>
+            <Text style={styles.note}>{next.box?.name ?? '薬箱未選択'}</Text>
           </> : <Text style={styles.note}>次の服薬予定はありません。</Text>}
         </View>
         <BunnyArt />

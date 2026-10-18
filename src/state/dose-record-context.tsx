@@ -4,6 +4,7 @@ import { AppState } from 'react-native';
 import { getMedicationDatabase } from '@/features/medications/database';
 import { localDay, nearbyScheduledDays, type DoseRecord, type DoseRecordSource } from '@/features/medications/dose-record';
 import { listDoseRecordsBetween, saveDoseRecord } from '@/features/medications/dose-record-repository';
+import { inTransaction } from '@/features/medications/transaction';
 
 type DoseRecordState = {
   day: string;
@@ -32,7 +33,7 @@ export function DoseRecordProvider({ children }: PropsWithChildren) {
     try {
       const database = await getMedicationDatabase();
       const days = nearbyScheduledDays(new Date());
-      const saved = await listDoseRecordsBetween(database, days[0], days[2]);
+      const saved = await inTransaction(database, (transaction) => listDoseRecordsBetween(transaction, days[0], days[2]));
       if (version === requestVersion.current) setRecords(saved);
     } catch {
       if (version === requestVersion.current) setLoadError('今日の服薬記録を読み込めませんでした。');

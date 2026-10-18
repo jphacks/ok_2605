@@ -72,15 +72,21 @@ async function readBox(db: MedicationDatabase, tagId?: string): Promise<NfcBox |
 
 export async function loadNfcBox(db: NfcDatabase, now = new Date()): Promise<NfcBoxSnapshot> {
   await initializeNfcDatabase(db);
-  const days = nearbyScheduledDays(now);
-  const records = await db.getAllAsync<NfcDoseRecord>(`
-    SELECT d.medication_id AS medicationId, m.name AS medicationName,
-      d.scheduled_day AS scheduledDay, m.dose_time AS doseTime, d.taken_at AS confirmedAt
-    FROM dose_records d JOIN medications m ON m.id = d.medication_id
-    WHERE d.scheduled_day >= ? AND d.scheduled_day <= ?
-    ORDER BY d.taken_at DESC
-  `, days[0], days[2]);
-  return { box: await readBox(db), boxes: await listMedicineBoxes(db), records };
+  // Registration/penalty writes use an exclusive connection. Read the snapshot
+  // through the same queue so it cannot race those writes or mix two snapshots.
+  return inTransaction(db, async (transaction) => {
+    const days = nearbyScheduledDays(now);
+    const records = await transaction.getAllAsync<NfcDoseRecord>(`
+      SELECT d.medication_id AS medicationId, m.name AS medicationName,
+        d.scheduled_day AS scheduledDay, m.dose_time AS doseTime, d.taken_at AS confirmedAt
+      FROM dose_records d JOIN medications m ON m.id = d.medication_id
+      WHERE d.scheduled_day >= ? AND d.scheduled_day <= ?
+      ORDER BY d.taken_at DESC
+    `, days[0], days[2]);
+    const boxes = await listMedicineBoxes(transaction);
+    const tagged = boxes.find((box) => !!box.tagId);
+    return { box: tagged?.tagId ? { tagId: tagged.tagId, medications: tagged.medications } : null, boxes, records };
+  });
 }
 
 export function pendingNfcDoses(box: NfcBox | null, now: Date): NfcDose[] {
@@ -168,24 +174,29 @@ export async function confirmNfcDose(
       throw new Error('このお薬は現在、服用確認の対象ではありません。ホームで服用時刻を確認してください。');
     }
 
-    const existing = await transaction.getFirstAsync<{ takenAt: string }>(
-      'SELECT taken_at AS takenAt FROM dose_records WHERE medication_id = ? AND scheduled_day = ?',
-      medicationId,
-      scheduledDay,
-    );
-    if (existing) {
-      result = { recorded: false, medicationName: dose.medication.name, confirmedAt: existing.takenAt };
-      return;
-    }
-
+    const doses = pendingNfcDoses(box, now).filter((candidate) =>
+      candidate.day === scheduledDay && candidate.medication.doseTime === dose.medication.doseTime);
+    const names: string[] = [];
+    let recorded = false;
     const confirmedAt = now.toISOString();
-    await transaction.runAsync(`INSERT INTO nfc_dose_confirmations
-      (medication_id, scheduled_day, dose_time, medication_name, tag_uid, confirmed_at)
-      VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(medication_id, scheduled_day, dose_time) DO NOTHING`,
-    dose.medication.id, dose.day, dose.medication.doseTime, dose.medication.name, tagId, confirmedAt);
-    await saveDoseRecord(transaction, dose.medication.id, dose.day, 'nfc', confirmedAt);
+    for (const member of doses) {
+      const existing = await transaction.getFirstAsync<{ takenAt: string }>(
+        'SELECT taken_at AS takenAt FROM dose_records WHERE medication_id = ? AND scheduled_day = ?',
+        member.medication.id,
+        scheduledDay,
+      );
+      if (existing) continue;
+
+      await transaction.runAsync(`INSERT INTO nfc_dose_confirmations
+        (medication_id, scheduled_day, dose_time, medication_name, tag_uid, confirmed_at)
+        VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(medication_id, scheduled_day, dose_time) DO NOTHING`,
+      member.medication.id, member.day, member.medication.doseTime, member.medication.name, tagId, confirmedAt);
+      await saveDoseRecord(transaction, member.medication.id, member.day, 'nfc', confirmedAt);
+      names.push(member.medication.name);
+      recorded = true;
+    }
     if (signal.aborted) throw new Error('読み取りを中止しました。');
-    result = { recorded: true, medicationName: dose.medication.name, confirmedAt };
+    result = { recorded, medicationName: (names.length ? names : doses.map((item) => item.medication.name)).join('・'), confirmedAt };
   });
   return result;
 }
