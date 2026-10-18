@@ -10,6 +10,7 @@ export type Medication = {
 };
 
 export type MedicationInput = {
+  boxId?: string;
   name: string;
   doseTime: string;
   penaltyAmount: string;

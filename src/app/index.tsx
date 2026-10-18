@@ -2,9 +2,11 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppState, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
+import { Image } from 'expo-image';
 import { AppBottomNav } from '@/components/app-bottom-nav';
+import { BunnyArt } from '@/components/nomupay-art';
 import { MedicationRegistryStatus } from '@/components/medication-registry-status';
+import { medicationColors as C } from '@/components/medication-screen';
 import { buildDailySchedule, localDay, nextScheduledDose } from '@/features/medications/dose-record';
 import { useDoseRecords } from '@/state/dose-record-context';
 import { useMedicationRegistry } from '@/state/medication-registry-context';
@@ -12,224 +14,113 @@ import { useNfcBox } from '@/state/nfc-box-context';
 import { doseDeadline } from '@/features/payments/penalty-repository';
 import { usePenalties } from '@/state/penalty-context';
 
-const C = { ink: '#263e48', muted: '#72848a', mint: '#36b7aa', pale: '#eef9fa', line: '#e5eeed', coral: '#e77760' };
-
-function formatDay(day: string) {
-  const [, month, date] = day.split('-').map(Number);
-  return `${month}/${date}`;
+function progressImage(progress: number) {
+  const circumference = 2 * Math.PI * 52;
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"><circle cx="64" cy="64" r="52" fill="none" stroke="#f0eae6" stroke-width="9"/><circle cx="64" cy="64" r="52" fill="none" stroke="#43b88b" stroke-width="9" stroke-linecap="round" stroke-dasharray="' + circumference * progress + ' ' + circumference + '" transform="rotate(-90 64 64)"/></svg>';
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
 }
 
 export default function HomeScreen() {
   const router = useRouter();
   const { medications, isLoading: medicationsLoading, loadError: medicationsError } = useMedicationRegistry();
-  const { day, records, isLoading: recordsLoading, loadError: recordsError, refresh } = useDoseRecords();
-  const { box, loading: nfcLoading, error: nfcError, reload: reloadNfc } = useNfcBox();
+  const { records, isLoading: recordsLoading, loadError: recordsError, refresh } = useDoseRecords();
+  const { boxes, loading: boxesLoading, error: boxesError, reload } = useNfcBox();
   const { error: penaltyError, refresh: refreshPenalties } = usePenalties();
   const android = Platform.OS === 'android';
   const [now, setNow] = useState(() => new Date());
+  const day = localDay(now);
   const schedule = useMemo(() => buildDailySchedule(medications, records, now), [medications, records, now]);
-  const actionableSchedule = useMemo(() => schedule.filter((item) =>
-    item.status !== 'due' || now.getTime() < doseDeadline(localDay(now), item.medication.doseTime).getTime()), [schedule, now]);
-  const next = useMemo(() => nextScheduledDose(actionableSchedule, medications, now), [actionableSchedule, medications, now]);
-  const takenCount = schedule.filter((item) => item.status === 'taken').length;
+  const actionable = useMemo(() => schedule.filter((item) => item.status !== 'due' || now.getTime() < doseDeadline(localDay(now), item.medication.doseTime).getTime()), [schedule, now]);
+  const next = useMemo(() => nextScheduledDose(actionable, medications, now), [actionable, medications, now]);
+  const taken = schedule.filter((item) => item.status === 'taken').length;
   const loading = medicationsLoading || recordsLoading;
   const hasError = !!medicationsError || !!recordsError;
+  const greeting = now.getHours() < 11 ? 'おはようございます' : now.getHours() < 18 ? 'こんにちは' : 'こんばんは';
 
-  useFocusEffect(useCallback(() => {
-    setNow(new Date());
-  }, []));
-
+  useFocusEffect(useCallback(() => { setNow(new Date()); }, []));
   useEffect(() => {
-    const updateNow = () => setNow(new Date());
-    const timer = setInterval(updateNow, 15_000);
+    const timer = setInterval(() => setNow(new Date()), 15_000);
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') {
-        updateNow();
-        void refresh();
-      }
+      if (state === 'active') { setNow(new Date()); void refresh(); }
     });
-    return () => {
-      clearInterval(timer);
-      subscription.remove();
-    };
+    return () => { clearInterval(timer); subscription.remove(); };
   }, [refresh]);
 
-  const openScanner = (medicationId: number) => {
-    router.push({ pathname: '/qr', params: { medicationId: String(medicationId), scheduledDay: day } });
-  };
+  function openScanner(medicationId: number) {
+    router.push({ pathname: '/verify', params: { medicationId: String(medicationId), scheduledDay: day } });
+  }
 
-  return (
-    <SafeAreaView style={styles.safe}>
-      <View style={styles.header}><Text style={styles.headerText}>くすり日和</Text></View>
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.kicker}>YOUR DAILY LITTLE PROMISE</Text>
-        <Text style={styles.title}>
-          {medications.length > 0 && takenCount === medications.length ? '今日も、よくできました！' : '今日のおくすり'}
-        </Text>
-        <View style={styles.mascot}><Text style={styles.bear}>🐻</Text><Text style={styles.spark}>✦</Text></View>
-        <Text style={styles.helper}>“飲んで、今日もいい一日にしよう！”</Text>
-
-        <MedicationRegistryStatus />
-        {!!penaltyError && <View style={styles.errorBox}>
-          <Text accessibilityRole="alert" style={styles.errorText}>{penaltyError}</Text>
-          <Pressable accessibilityRole="button" style={styles.retry} onPress={() => void refreshPenalties()}><Text style={styles.retryText}>飲み忘れを再確認</Text></Pressable>
+  return <SafeAreaView style={styles.safe}>
+    <View style={styles.header}><Text style={styles.brand}>のむペイ</Text><Text style={styles.date}>{now.getMonth() + 1}月{now.getDate()}日（{'日月火水木金土'[now.getDay()]}）</Text></View>
+    <ScrollView contentContainerStyle={styles.content}>
+      <View style={styles.greetingRow}><View style={{ flex: 1 }}><Text style={styles.greeting}>{greeting}</Text><Text style={styles.note}>今日もあなたのペースで、ひとつずつ。</Text></View><Pressable accessibilityRole="button" accessibilityLabel="薬箱を開く" onPress={() => router.push('/boxes')} style={styles.boxShortcut}><Text style={styles.boxIcon}>▣</Text></Pressable></View>
+      <MedicationRegistryStatus />
+      {!loading && !hasError && <View style={styles.summary}>
+        <View style={styles.progressGroup}>
+          <Text style={styles.sectionTitle}>今日の服薬</Text>
+          <View accessible accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: Math.max(1, medications.length), now: taken }} accessibilityLabel={'今日の服薬、' + medications.length + '件中' + taken + '件完了'} style={styles.ring}>
+            <Image source={{ uri: progressImage(medications.length ? taken / medications.length : 0) }} style={StyleSheet.absoluteFill} />
+            <Text style={styles.progressText}>{taken}<Text style={styles.progressTotal}>/{medications.length}</Text></Text>
+          </View>
+          <Text style={styles.progressCaption}>{medications.length > 0 && taken === medications.length ? '今日の服薬はすべて完了！' : 'できた、を重ねよう。'}</Text>
+        </View>
+        <View style={styles.bunny}><BunnyArt /></View>
+      </View>}
+      {!!recordsError && <View style={styles.card}><Text accessibilityRole="alert" style={styles.error}>{recordsError}</Text><Pressable style={styles.secondary} onPress={() => void refresh()}><Text style={styles.link}>もう一度読み込む</Text></Pressable></View>}
+      {!!penaltyError && <View style={styles.card}><Text accessibilityRole="alert" style={styles.error}>{penaltyError}</Text><Pressable style={styles.secondary} onPress={() => void refreshPenalties()}><Text style={styles.link}>飲み忘れを再確認</Text></Pressable></View>}
+      {!!boxesError && <View style={styles.card}><Text accessibilityRole="alert" style={styles.error}>{boxesError}</Text><Pressable style={styles.secondary} onPress={() => void reload()}><Text style={styles.link}>薬箱を再読み込み</Text></Pressable></View>}
+      {!boxesLoading && !boxesError && !boxes.length && <View style={styles.card}>
+        <Text style={styles.sectionTitle}>はじめに、薬箱を登録しましょう</Text>
+        <Text style={styles.note}>お薬を入れる場所を決めて、毎日の服薬をはじめましょう。</Text>
+        <Pressable accessibilityRole="button" style={styles.primary} onPress={() => router.push('/boxes/new')}><Text style={styles.primaryText}>＋ 薬箱を登録する</Text></Pressable>
+      </View>}
+      {!loading && !hasError && !medications.length && boxes.length > 0 && <View style={styles.card}>
+        <Text style={styles.sectionTitle}>いつものお薬を登録しましょう</Text><Text style={styles.note}>お薬と服用時間を登録すると、ここに今日の予定が表示されます。</Text>
+        <Pressable accessibilityRole="button" style={styles.primary} onPress={() => router.push('/medications/new')}><Text style={styles.primaryText}>＋ お薬を登録する</Text></Pressable>
+      </View>}
+      {!loading && !hasError && medications.length > 0 && <>
+        <View style={styles.sectionRow}><Text style={styles.sectionTitle}>今日のお薬</Text><Pressable accessibilityRole="button" onPress={() => router.push('/history')} style={styles.historyLink}><Text style={styles.link}>履歴を見る ›</Text></Pressable></View>
+        <View style={styles.list}>
+          {schedule.map((item) => {
+            const isTaken = item.status === 'taken';
+            const expired = item.status === 'due' && now.getTime() >= doseDeadline(day, item.medication.doseTime).getTime();
+            const canScan = item.status === 'due' && !expired;
+            const box = boxes.find((b) => b.medications.some((m) => m.id === item.medication.id));
+            const hour = Number(item.medication.doseTime.slice(0, 2));
+            return <Pressable key={item.medication.id} accessibilityRole="button" accessibilityLabel={item.medication.doseTime + ' ' + item.medication.name + '、' + (isTaken ? '服用済み' : expired ? '確認期限終了' : canScan ? '服用を記録する' : '服用時間前')} accessibilityState={{ disabled: !canScan }} disabled={!canScan} onPress={() => openScanner(item.medication.id)} style={styles.doseRow}>
+              <View style={[styles.timeIcon, hour >= 17 && styles.nightIcon]}><Text style={[styles.sun, hour >= 17 && styles.moon]}>{hour < 17 ? '☀' : '☾'}</Text></View>
+              <View style={{ flex: 1, gap: 5 }}><View style={styles.doseHeading}><Text style={styles.doseTime}>{item.medication.doseTime}</Text><Text style={styles.doseName}>{item.medication.name}</Text></View><Text style={styles.doseNote}>{box?.name ?? '薬箱未選択'}{expired ? ' · 確認期限終了' : canScan ? ' · 服用時間です' : ''}</Text></View>
+              <View style={[styles.status, isTaken && styles.statusTaken]}><Text style={[styles.statusText, isTaken && { color: '#fff' }]}>{isTaken ? '✓' : expired ? '!' : ''}</Text></View>
+            </Pressable>;
+          })}
+        </View>
+        {next && <View style={styles.next}>
+          <Text style={styles.note}>{next.due ? '今のお薬' : next.day === day ? '次の服薬予定' : Number(next.day.slice(5, 7)) + '月' + Number(next.day.slice(8, 10)) + '日の予定'}</Text>
+          <Text style={styles.nextText}>{next.medication.doseTime}　{next.medication.name}</Text>
+          {next.due && <Pressable accessibilityRole="button" style={styles.primary} onPress={() => openScanner(next.medication.id)}><Text style={styles.primaryText}>{android ? 'NFCで服用を記録する' : '共通QRで服用を記録する'}</Text></Pressable>}
         </View>}
-        {android && !nfcLoading && !box && (
-          <View style={styles.emptyCard}>
-            <Text style={styles.sectionTitle}>最初に薬箱を登録しましょう</Text>
-            <Text style={styles.bodyText}>登録は最初の1回だけです。追加する薬はすべて、この薬箱へ自動で紐づきます。</Text>
-            <Pressable accessibilityRole="button" style={styles.primary} onPress={() => router.push('/qr')}>
-              <Text style={styles.primaryText}>薬箱のNFCタグを登録する</Text>
-            </Pressable>
-            {!!nfcError && <><Text style={styles.errorText}>{nfcError}</Text><Pressable onPress={() => void reloadNfc()} style={styles.retry}><Text style={styles.retryText}>薬箱を再読み込み</Text></Pressable></>}
-          </View>
-        )}
-        {recordsError && (
-          <View style={styles.errorBox}>
-            <Text accessibilityRole="alert" style={styles.errorText}>{recordsError}</Text>
-            <Pressable accessibilityRole="button" style={styles.retry} onPress={() => void refresh()}>
-              <Text style={styles.retryText}>もう一度読み込む</Text>
-            </Pressable>
-          </View>
-        )}
-
-        {!loading && !hasError && medications.length === 0 && (
-          <View style={styles.emptyCard}>
-            <Text style={styles.sectionTitle}>お薬がまだ登録されていません</Text>
-            <Text style={styles.bodyText}>薬を登録すると、今日の予定がここに表示されます。</Text>
-            <Pressable style={styles.primary} onPress={() => router.push('/medications/new')}>
-              <Text style={styles.primaryText}>＋ 薬を登録する</Text>
-            </Pressable>
-          </View>
-        )}
-
-        {!loading && !hasError && next && (
-          <View style={[styles.nextCard, next.due && styles.dueCard]}>
-            <Text style={[styles.nextLabel, next.due && styles.dueText]}>
-              {next.due ? '服用時間になりました' : next.day === day ? '次の服薬予定' : `${formatDay(next.day)}の次の服薬予定`}
-            </Text>
-            <Text style={styles.nextTime}>{next.medication.doseTime}</Text>
-            <Text style={styles.nextName}>{next.medication.name}</Text>
-            {next.due && (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`${next.medication.name}の服用を記録する`}
-                accessibilityHint={android ? 'NFCタグの読み取り画面を開きます' : 'QRコードの読み取り画面を開きます'}
-                style={styles.primary}
-                onPress={() => openScanner(next.medication.id)}>
-                <Text style={styles.primaryText}>「{next.medication.name}」の服用を記録する</Text>
-                <Text style={styles.primarySubText}>{android ? 'NFCタグをタッチ' : 'QRコードを読み取る'}</Text>
-              </Pressable>
-            )}
-          </View>
-        )}
-
-        {!loading && !hasError && medications.length > 0 && (
-          <>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>今日の服薬予定</Text>
-              <Text style={styles.progress}>{takenCount}/{medications.length} 完了</Text>
-            </View>
-            <View style={styles.list}>
-              {schedule.map((item) => {
-                const isTaken = item.status === 'taken';
-                const isDue = item.status === 'due';
-                const expired = isDue && now.getTime() >= doseDeadline(day, item.medication.doseTime).getTime();
-                const canScan = isDue && !expired;
-                return (
-                  <View key={item.medication.id} style={styles.medicationCard}>
-                    <View style={styles.medicationRow}>
-                      <View style={[styles.statusDot, isTaken && styles.takenDot, isDue && styles.dueDot]}>
-                        <Text style={styles.statusMark}>{isTaken ? '✓' : isDue ? '!' : '·'}</Text>
-                      </View>
-                      <View style={styles.medicationInfo}>
-                        <Text style={styles.medicationTime}>{item.medication.doseTime}</Text>
-                        <Text style={styles.medicationName}>{item.medication.name}</Text>
-                      </View>
-                      <Text style={[styles.statusText, isDue && styles.dueText]}>
-                        {isTaken ? '服用済み' : expired ? '確認期限終了' : isDue ? '服用時間です' : '予定'}
-                      </Text>
-                    </View>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={isTaken
-                        ? `${item.medication.name}は服用記録済みです`
-                        : expired
-                          ? `${item.medication.name}の確認期限を過ぎました`
-                          : isDue
-                            ? `${item.medication.name}の服用を記録する`
-                            : `${item.medication.name}は${item.medication.doseTime}から記録できます`}
-                      accessibilityState={{ disabled: isTaken || !canScan }}
-                      disabled={isTaken || !canScan}
-                      onPress={() => openScanner(item.medication.id)}
-                      style={[styles.scanButton, (isTaken || !canScan) && styles.disabled]}>
-                      <Text style={styles.scanButtonText}>
-                        {isTaken
-                          ? `✓ 「${item.medication.name}」は服用記録済み`
-                          : expired
-                            ? `「${item.medication.name}」の確認期限を過ぎました`
-                            : isDue
-                              ? `「${item.medication.name}」の服用を記録する`
-                              : `${item.medication.doseTime}から「${item.medication.name}」を記録できます`}
-                      </Text>
-                      {isDue && !isTaken && !expired && (
-                        <Text style={styles.scanButtonSubText}>{android ? 'NFCタグをタッチ' : 'QRコードを読み取る'}</Text>
-                      )}
-                    </Pressable>
-                  </View>
-                );
-              })}
-            </View>
-          </>
-        )}
-      </ScrollView>
-      <AppBottomNav />
-    </SafeAreaView>
-  );
+        {android && boxes.some((box) => !box.tagId) && <Pressable accessibilityRole="button" style={styles.secondary} onPress={() => router.push('/boxes')}><Text style={styles.link}>薬箱のNFCタグを登録する ›</Text></Pressable>}
+      </>}
+    </ScrollView>
+    <AppBottomNav />
+  </SafeAreaView>;
 }
-
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f5faf8' },
-  header: { minHeight: 48, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f3fafb' },
-  headerText: { fontSize: 13, fontWeight: '600', color: C.ink },
-  content: { padding: 24, paddingBottom: 40 },
-  kicker: { fontSize: 10, letterSpacing: 1.5, color: '#5e9696', textAlign: 'center', marginTop: 8 },
-  title: { fontSize: 24, lineHeight: 36, fontWeight: '700', color: C.ink, textAlign: 'center', marginTop: 9 },
-  mascot: { height: 135, alignItems: 'center', justifyContent: 'center' },
-  bear: { fontSize: 92 },
-  spark: { position: 'absolute', right: 40, top: 16, fontSize: 28, color: '#f7c45f' },
-  helper: { fontSize: 11, color: C.muted, textAlign: 'center', marginBottom: 18 },
-  nextCard: { backgroundColor: '#fff', borderRadius: 20, padding: 20, borderWidth: 1, borderColor: C.line },
-  dueCard: { borderColor: '#f0b4a7', backgroundColor: '#fffaf8' },
-  nextLabel: { color: C.mint, fontSize: 12, fontWeight: '700', textAlign: 'center' },
-  nextTime: { fontSize: 38, fontWeight: '700', textAlign: 'center', color: C.ink, marginTop: 5 },
-  nextName: { fontSize: 15, textAlign: 'center', color: C.ink, marginTop: 3 },
-  primary: { backgroundColor: C.mint, borderRadius: 14, padding: 14, alignItems: 'center', marginTop: 18 },
-  primaryText: { color: '#fff', fontSize: 13, fontWeight: '700', textAlign: 'center' },
-  primarySubText: { color: '#eafffc', fontSize: 10, fontWeight: '600', marginTop: 4, textAlign: 'center' },
-  emptyCard: { backgroundColor: '#fff', borderRadius: 20, padding: 22, borderWidth: 1, borderColor: C.line },
-  bodyText: { color: C.muted, fontSize: 13, lineHeight: 22, marginTop: 8 },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 26, marginBottom: 12 },
-  sectionTitle: { fontSize: 15, fontWeight: '700', color: C.ink },
-  progress: { color: C.muted, fontSize: 12 },
-  list: { gap: 12 },
-  medicationCard: { backgroundColor: '#fff', borderRadius: 18, padding: 16, borderWidth: 1, borderColor: C.line },
-  medicationRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  medicationInfo: { flex: 1 },
-  medicationTime: { color: C.mint, fontSize: 17, fontWeight: '700' },
-  medicationName: { color: C.ink, fontSize: 14, marginTop: 3 },
-  statusDot: { width: 30, height: 30, borderRadius: 15, backgroundColor: C.pale, alignItems: 'center', justifyContent: 'center' },
-  takenDot: { backgroundColor: C.mint },
-  dueDot: { backgroundColor: C.coral },
-  statusMark: { color: '#fff', fontWeight: '700' },
-  statusText: { color: C.muted, fontSize: 11 },
-  dueText: { color: C.coral },
-  scanButton: { backgroundColor: C.mint, borderRadius: 12, padding: 12, alignItems: 'center', marginTop: 14 },
-  scanButtonText: { color: '#fff', fontSize: 12, fontWeight: '700', textAlign: 'center' },
-  scanButtonSubText: { color: '#eafffc', fontSize: 10, fontWeight: '600', marginTop: 4, textAlign: 'center' },
-  disabled: { backgroundColor: '#a9bcb9' },
-  errorBox: { backgroundColor: '#fff', borderRadius: 16, padding: 16, gap: 12, marginBottom: 16 },
-  errorText: { color: '#aa353c', fontSize: 13 },
-  retry: { backgroundColor: C.pale, borderRadius: 12, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  retryText: { color: C.mint, fontWeight: '600' },
+  safe: { flex: 1, backgroundColor: C.background }, header: { minHeight: 54, paddingHorizontal: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  brand: { color: C.mint, fontSize: 24, fontWeight: '800', letterSpacing: 1 }, date: { color: C.muted, fontSize: 11 },
+  content: { padding: 24, paddingTop: 16, gap: 16, width: '100%', maxWidth: 560, alignSelf: 'center' },
+  greetingRow: { flexDirection: 'row', gap: 12, alignItems: 'center' }, greeting: { color: C.ink, fontSize: 19, fontWeight: '700', marginBottom: 6 }, note: { fontSize: 12, color: C.muted, lineHeight: 22 },
+  boxShortcut: { width: 44, height: 44, backgroundColor: C.pale, borderRadius: 16, alignItems: 'center', justifyContent: 'center' }, boxIcon: { color: C.mint, fontSize: 26 },
+  summary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around', paddingVertical: 12 }, progressGroup: { alignItems: 'center', flex: 1 },
+  bunny: { flex: 1, alignItems: 'center', overflow: 'hidden' }, ring: { width: 128, height: 128, justifyContent: 'center', alignItems: 'center', marginTop: 8 },
+  progressText: { color: C.ink, fontSize: 36, fontWeight: '700' }, progressTotal: { color: C.muted, fontSize: 22, fontWeight: '400' }, progressCaption: { color: C.muted, fontSize: 10, marginTop: 6 },
+  card: { borderRadius: 22, padding: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: C.line, gap: 10 }, sectionTitle: { color: C.ink, fontSize: 14, fontWeight: '700' },
+  sectionRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, historyLink: { minHeight: 44, justifyContent: 'center' },
+  list: { borderTopWidth: 1, borderColor: C.line }, doseRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 18, gap: 12, borderBottomWidth: 1, borderColor: C.line },
+  timeIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#fff1d9', alignItems: 'center', justifyContent: 'center' }, nightIcon: { backgroundColor: '#efecfc' },
+  sun: { color: '#e8ad4c', fontSize: 22 }, moon: { color: '#a29bd6' }, doseHeading: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, alignItems: 'center' },
+  doseTime: { color: C.ink, fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'] }, doseName: { color: C.ink, fontSize: 13 }, doseNote: { color: C.muted, fontSize: 10 },
+  status: { width: 23, height: 23, borderRadius: 12, borderWidth: 1, borderColor: '#cec4c5', alignItems: 'center', justifyContent: 'center' }, statusTaken: { backgroundColor: '#43b88b', borderColor: '#43b88b' }, statusText: { color: C.mint, fontSize: 14, fontWeight: '700' },
+  next: { gap: 8, paddingTop: 4 }, nextText: { color: C.ink, fontSize: 16, fontWeight: '600' }, primary: { minHeight: 50, backgroundColor: C.mint, borderRadius: 26, padding: 14, alignItems: 'center', justifyContent: 'center', marginTop: 6 },
+  primaryText: { color: '#fff', fontSize: 14, fontWeight: '700', textAlign: 'center' }, secondary: { minHeight: 44, alignItems: 'center', justifyContent: 'center' }, link: { color: C.mint, fontSize: 12 }, error: { color: C.error, fontSize: 13, lineHeight: 22 },
 });

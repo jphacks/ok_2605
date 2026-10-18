@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type PropsWithChildren } from 'react';
-import { AppState, Platform } from 'react-native';
+import { AppState } from 'react-native';
 import { getMedicationDatabase } from '@/features/medications/database';
 import { loadNfcBox, type NfcBoxSnapshot } from '@/features/nfc/nfc-box-repository';
 import { useMedicationRegistry } from './medication-registry-context';
@@ -14,13 +14,12 @@ const Context = createContext<NfcBoxState | null>(null);
 
 export function NfcBoxProvider({ children }: PropsWithChildren) {
   const { medications, isLoading, loadError } = useMedicationRegistry();
-  const [snapshot, setSnapshot] = useState<NfcBoxSnapshot>({ box: null, records: [] });
-  const [loading, setLoading] = useState(Platform.OS === 'android');
+  const [snapshot, setSnapshot] = useState<NfcBoxSnapshot>({ box: null, boxes: [], records: [] });
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
   const version = useRef(0);
   const reload = useCallback((): Promise<void> => {
-    if (Platform.OS !== 'android') return Promise.resolve();
     const request = ++version.current;
     const date = new Date();
     return getMedicationDatabase().then((db) => loadNfcBox(db, date)).then((result) => {
@@ -33,7 +32,7 @@ export function NfcBoxProvider({ children }: PropsWithChildren) {
   }, []);
 
   useEffect(() => {
-    if (Platform.OS !== 'android' || isLoading || loadError) return;
+    if (isLoading || loadError) return;
     void reload();
     const timer = setInterval(() => { if (AppState.currentState === 'active') void reload(); }, 30000);
     const subscription = AppState.addEventListener('change', (state) => { if (state === 'active') void reload(); });

@@ -97,7 +97,7 @@ test('registered medicines survive a file database close and reopen and remain t
     database = createDatabase(file);
     await initializeMedicationDatabase(database.db);
     assert.deepEqual(await listMedications(database.db), [morning, sameTime, night]);
-    assert.deepEqual(await database.db.getFirstAsync('PRAGMA user_version'), { user_version: 5 });
+    assert.deepEqual(await database.db.getFirstAsync('PRAGMA user_version'), { user_version: 6 });
   } finally {
     database?.connection.close();
     await rm(directory, { recursive: true, force: true });
@@ -141,17 +141,20 @@ test('database constraints reject invalid stored values', async (context) => {
   assert.deepEqual(await listMedications(db), []);
 });
 
-test('reinitializing preserves existing medicine data and newer schemas are left untouched', async (context) => {
+test('reinitializing accepts the shipped iOS v6 database and leaves newer schemas untouched', async (context) => {
   const { connection, db } = createDatabase();
   context.after(() => connection.close());
   await initializeMedicationDatabase(db);
   const medication = await saveMedication(db, validInput);
   await initializeMedicationDatabase(db);
   assert.deepEqual(await listMedications(db), [medication]);
-  await db.execAsync('PRAGMA user_version = 6;');
+  assert.deepEqual(await db.getFirstAsync('PRAGMA user_version'), { user_version: 6 });
+  await initializeMedicationDatabase(db);
+  assert.deepEqual(await listMedications(db), [medication]);
+  await db.execAsync('PRAGMA user_version = 7;');
   await assert.rejects(initializeMedicationDatabase(db), /新しいデータベース形式/);
   assert.deepEqual(await listMedications(db), [medication]);
-  assert.deepEqual(await db.getFirstAsync('PRAGMA user_version'), { user_version: 6 });
+  assert.deepEqual(await db.getFirstAsync('PRAGMA user_version'), { user_version: 7 });
 });
 
 test('repository validates independently and leaves no record after a failed insert', async (context) => {

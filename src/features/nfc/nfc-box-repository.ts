@@ -4,6 +4,7 @@ import { inTransaction } from '../medications/transaction.ts';
 import { saveDoseRecord } from '../medications/dose-record-repository.ts';
 import { localDay } from '../medications/dose-record.ts';
 import { GRACE_MINUTES, doseDeadline } from '../payments/penalty-repository.ts';
+import { listMedicineBoxes, type MedicineBox } from '../boxes/medicine-box-repository.ts';
 
 export interface NfcDatabase extends MedicationDatabase {
   withExclusiveTransactionAsync(task: (transaction: MedicationDatabase) => Promise<void>): Promise<void>;
@@ -17,7 +18,7 @@ export type NfcDoseRecord = {
   doseTime: string;
   confirmedAt: string;
 };
-export type NfcBoxSnapshot = { box: NfcBox | null; records: NfcDoseRecord[] };
+export type NfcBoxSnapshot = { box: NfcBox | null; boxes: MedicineBox[]; records: NfcDoseRecord[] };
 export type NfcDose = { medication: Medication; day: string; deadline: Date };
 
 const initialization = new WeakMap<NfcDatabase, Promise<void>>();
@@ -62,16 +63,10 @@ export async function initializeNfcDatabase(db: NfcDatabase): Promise<void> {
   await work;
 }
 
-async function readBox(db: MedicationDatabase): Promise<NfcBox | null> {
-  const box = await db.getFirstAsync<{ tagId: string }>('SELECT tag_uid AS tagId FROM nfc_box WHERE id = 1');
-  if (!box) return null;
-  const medications = await db.getAllAsync<Medication>(`
-    SELECT m.id, m.name, m.dose_time AS doseTime, m.penalty_amount AS penaltyAmount, m.created_at AS createdAt
-    FROM medications m JOIN nfc_box_medications b ON b.medication_id = m.id
-    WHERE m.id IN (SELECT medication_id FROM medication_details WHERE archived_at IS NULL)
-    ORDER BY m.dose_time, m.id
-  `);
-  return { tagId: box.tagId, medications };
+async function readBox(db: MedicationDatabase, tagId?: string): Promise<NfcBox | null> {
+  const boxes = await listMedicineBoxes(db);
+  const box = boxes.find((item) => tagId ? item.tagId === tagId : !!item.tagId);
+  return box?.tagId ? { tagId: box.tagId, medications: box.medications } : null;
 }
 
 export async function loadNfcBox(db: NfcDatabase, now = new Date()): Promise<NfcBoxSnapshot> {
@@ -85,7 +80,7 @@ export async function loadNfcBox(db: NfcDatabase, now = new Date()): Promise<Nfc
     WHERE d.scheduled_day >= ? AND d.scheduled_day <= ?
     ORDER BY d.taken_at DESC
   `, localDay(yesterday), localDay(now));
-  return { box: await readBox(db), records };
+  return { box: await readBox(db), boxes: await listMedicineBoxes(db), records };
 }
 
 export function pendingNfcDoses(box: NfcBox | null, now: Date): NfcDose[] {
@@ -111,6 +106,10 @@ export async function saveNfcBox(db: NfcDatabase, tagId: string, signal: AbortSi
       ON CONFLICT(id) DO UPDATE SET tag_uid = excluded.tag_uid, updated_at = excluded.updated_at`, tagId, new Date().toISOString());
     await transaction.runAsync('DELETE FROM nfc_box_medications');
     await transaction.runAsync('INSERT INTO nfc_box_medications (medication_id) SELECT id FROM medications');
+    await transaction.runAsync(`INSERT INTO medicine_boxes (name, tag_uid, legacy_id, created_at)
+      VALUES ('いつもの薬箱', ?, 1, ?) ON CONFLICT(legacy_id) DO UPDATE SET tag_uid = excluded.tag_uid`, tagId, new Date().toISOString());
+    await transaction.runAsync(`INSERT OR IGNORE INTO medicine_box_assignments (medication_id, box_id)
+      SELECT m.id, b.id FROM medications m CROSS JOIN medicine_boxes b WHERE b.legacy_id = 1`);
     const count = await transaction.getFirstAsync<{ count: number }>('SELECT COUNT(*) AS count FROM nfc_box_medications');
     linkedMedicationCount = count?.count ?? 0;
     if (signal.aborted) throw new Error('登録を中止しました。');
@@ -123,7 +122,7 @@ export async function confirmNfcDoses(db: NfcDatabase, tagId: string, signal: Ab
   let result = { recorded: 0, alreadyRecorded: 0, names: [] as string[] };
   await inTransaction(db, async (transaction) => {
     if (signal.aborted) throw new Error('読み取りを中止しました。');
-    const box = await readBox(transaction);
+    const box = await readBox(transaction, tagId);
     if (!box || tagId !== box.tagId) throw new Error('登録した薬箱のタグではありません。薬箱のタグを確認してください。');
     const now = new Date();
     const doses = pendingNfcDoses(box, now);
@@ -160,7 +159,7 @@ export async function confirmNfcDose(
   let result = { recorded: false, medicationName: '', confirmedAt: '' };
   await inTransaction(db, async (transaction) => {
     if (signal.aborted) throw new Error('読み取りを中止しました。');
-    const box = await readBox(transaction);
+    const box = await readBox(transaction, tagId);
     if (!box || tagId !== box.tagId) throw new Error('登録した薬箱のタグではありません。薬箱のタグを確認してください。');
 
     const dose = pendingNfcDoses(box, now).find(

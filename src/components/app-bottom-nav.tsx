@@ -5,6 +5,7 @@ const tabs = [
   { title: 'ホーム', icon: '⌂', href: '/' },
   { title: '履歴', icon: '▥', href: '/history' },
   { title: 'お薬', icon: '▤', href: '/medications' },
+  { title: '薬箱', icon: '▣', href: '/boxes' },
   { title: '設定', icon: '⚙', href: '/explore' },
 ] as const;
 
@@ -13,7 +14,7 @@ export function AppBottomNav({ disabled = false }: { disabled?: boolean }) {
   return (
     <View style={styles.nav}>
       {tabs.map((tab) => {
-        const selected = tab.href === '/medications' ? pathname.startsWith('/medications') : pathname === tab.href || (tab.href === '/explore' && pathname === '/payments');
+        const selected = tab.href === '/medications' || tab.href === '/boxes' ? pathname.startsWith(tab.href) : pathname === tab.href || (tab.href === '/explore' && ['/payments', '/penalties', '/reminders'].includes(pathname));
         return (
           <Pressable
             key={tab.title}
@@ -33,10 +34,10 @@ export function AppBottomNav({ disabled = false }: { disabled?: boolean }) {
 }
 
 const styles = StyleSheet.create({
-  nav: { flexDirection: 'row', backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#e5eeed', paddingHorizontal: 8, paddingTop: 7, paddingBottom: 3, minHeight: 69 },
+  nav: { flexDirection: 'row', backgroundColor: '#fffdfa', borderTopWidth: 1, borderTopColor: '#f2e4e4', paddingHorizontal: 8, paddingTop: 7, paddingBottom: 3, minHeight: 69 },
   tab: { flex: 1, minHeight: 52, alignItems: 'center', justifyContent: 'center', gap: 4, borderRadius: 10 },
-  selected: { backgroundColor: '#f3faf9' },
+  selected: { backgroundColor: '#fff0f2' },
   icon: { color: '#8b999d', fontSize: 22 },
   label: { color: '#8b999d', fontSize: 9 },
-  active: { color: '#338fa4' },
+  active: { color: '#f56889' },
 });

@@ -92,7 +92,7 @@ export function ReminderProvider({ children }: PropsWithChildren) {
     const receivedAt = new Date(Platform.OS === 'ios' ? notification.date * 1000 : notification.date);
     handled.current = key;
     router.replace({
-      pathname: '/qr',
+      pathname: '/verify',
       params: {
         medicationId: String(id),
         scheduledDay: localDay(receivedAt),

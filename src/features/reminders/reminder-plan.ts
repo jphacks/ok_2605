@@ -15,7 +15,7 @@ export function reminderRequest(medication: Medication) {
   return {
     identifier: `${REMINDER_PREFIX}${medication.id}`,
     content: {
-      title: 'おくすりの時間です',
+      title: 'のむペイ｜おくすりの時間です',
       body: `${medication.name}：${medication.doseTime}の服用時間です。`,
       sound: 'default',
       data: { kind: REMINDER_KIND, medicationId: medication.id, doseTime: medication.doseTime, version: 1 },

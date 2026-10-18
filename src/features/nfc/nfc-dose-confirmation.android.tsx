@@ -11,7 +11,7 @@ import { useNfcBox } from '@/state/nfc-box-context';
 import { confirmNfcDose } from './nfc-box-repository';
 import { NfcReadError, readNfcTag } from './nfc-reader.android';
 
-const C = { ink: '#263e48', muted: '#72848a', mint: '#36b7aa', pale: '#e8f7f4', coral: '#e77760' };
+const C = { ink: '#3b3439', muted: '#93858a', mint: '#f56889', pale: '#fff0f2', coral: '#e77760' };
 
 export default function NfcDoseConfirmationScreen() {
   const router = useRouter();
@@ -21,7 +21,8 @@ export default function NfcDoseConfirmationScreen() {
   const validOccurrence = Number.isSafeInteger(medicationId) && medicationId > 0 && params.scheduledDay === today;
   const { medications, isLoading: medicationsLoading } = useMedicationRegistry();
   const { records, isLoading: recordsLoading, refresh: refreshDoseRecords } = useDoseRecords();
-  const { box, loading: boxLoading, error: boxError, reload } = useNfcBox();
+  const { boxes, loading: boxLoading, error: boxError, reload } = useNfcBox();
+  const box = boxes.find((item) => item.medications.some((m) => m.id === medicationId) && item.tagId);
   const medication = medications.find((item) => item.id === medicationId);
   const alreadyTaken = records.some((record) => record.medicationId === medicationId && record.scheduledDay === today);
   const boxHasMedication = box?.medications.some((item) => item.id === medicationId) ?? false;
@@ -124,7 +125,7 @@ export default function NfcDoseConfirmationScreen() {
       {state === 'loading' && <ActivityIndicator color={C.mint} size="large" />}
       <Text style={styles.errorTitle}>{title}</Text>
       {!!body && <Text style={styles.body}>{body}</Text>}
-      {state === 'unregistered' && <Pressable accessibilityRole="button" style={styles.primary} onPress={() => router.replace('/qr')}><Text style={styles.primaryText}>薬箱タグを登録する</Text></Pressable>}
+      {state === 'unregistered' && <Pressable accessibilityRole="button" style={styles.primary} onPress={() => router.replace('/boxes')}><Text style={styles.primaryText}>薬箱タグを登録する</Text></Pressable>}
       {state === 'box-error' && <Pressable accessibilityRole="button" style={styles.primary} onPress={() => void reload()}><Text style={styles.primaryText}>再読み込み</Text></Pressable>}
       <Pressable accessibilityRole="button" style={styles.secondary} onPress={goHome}><Text style={styles.secondaryText}>ホームへ戻る</Text></Pressable>
     </SafeAreaView>;
@@ -157,7 +158,7 @@ export default function NfcDoseConfirmationScreen() {
         </View>
 
         <Text style={styles.touch}>NFCタグにタッチ！</Text>
-        <Text style={styles.body}>薬箱に貼ったタグへ{`\n`}スマホの背面を近づけてください</Text>
+        <Text style={styles.body}>「{box?.name}」に貼ったタグへ{`\n`}スマホの背面を近づけてください</Text>
         {busy && <View style={styles.statusRow}><ActivityIndicator color={C.mint} /><Text style={styles.status}>タグを待っています…</Text></View>}
         {!!error && <View style={styles.errorBox}>
           <Text accessibilityRole="alert" style={styles.error}>{error}</Text>
@@ -166,7 +167,7 @@ export default function NfcDoseConfirmationScreen() {
       </View>
 
       <View style={styles.footer}>
-        <Pressable accessibilityRole="button" disabled={busy} onPress={goHome} style={styles.cancel}>
+        <Pressable accessibilityRole="button" onPress={() => { controller.current?.abort(); goHome(); }} style={styles.cancel}>
           <Text style={styles.cancelText}>あとで飲む</Text>
         </Pressable>
       </View>
@@ -175,22 +176,22 @@ export default function NfcDoseConfirmationScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f5faf8' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 18, padding: 28, backgroundColor: '#f5faf8' },
-  header: { minHeight: 52, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', backgroundColor: '#f3fafb' },
+  safe: { flex: 1, backgroundColor: '#fff9f6' },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 18, padding: 28, backgroundColor: '#fff9f6' },
+  header: { minHeight: 52, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff9f6' },
   back: { width: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   backText: { color: C.ink, fontSize: 30 },
   headerTitle: { flex: 1, textAlign: 'center', color: C.ink, fontSize: 14, fontWeight: '700' },
   headerSpace: { width: 44 },
   content: { flex: 1, alignItems: 'center', paddingHorizontal: 28, paddingTop: 30 },
-  kicker: { color: '#5e9696', fontSize: 10, letterSpacing: 1.5 },
+  kicker: { color: '#d98a9b', fontSize: 10, letterSpacing: 1.5 },
   time: { marginTop: 8, color: C.ink, fontSize: 38, fontWeight: '800', fontVariant: ['tabular-nums'] },
   namePill: { marginTop: 8, paddingHorizontal: 18, paddingVertical: 8, borderRadius: 999, backgroundColor: C.pale },
-  name: { color: '#267f73', fontSize: 14, fontWeight: '700' },
+  name: { color: '#c65876', fontSize: 14, fontWeight: '700' },
   question: { marginTop: 22, color: C.ink, fontSize: 25, lineHeight: 37, textAlign: 'center', fontWeight: '800' },
   nfcVisual: { width: 210, height: 150, marginTop: 22, alignItems: 'center', justifyContent: 'center' },
-  waveLarge: { position: 'absolute', width: 150, height: 150, borderRadius: 75, borderWidth: 2, borderColor: '#c9ebe5' },
-  waveMedium: { position: 'absolute', width: 108, height: 108, borderRadius: 54, borderWidth: 2, borderColor: '#9fded4' },
+  waveLarge: { position: 'absolute', width: 150, height: 150, borderRadius: 75, borderWidth: 2, borderColor: '#f9dce3' },
+  waveMedium: { position: 'absolute', width: 108, height: 108, borderRadius: 54, borderWidth: 2, borderColor: '#f5b3c3' },
   tag: { position: 'absolute', left: 31, width: 68, height: 88, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff', borderWidth: 2, borderColor: C.mint, transform: [{ rotate: '-7deg' }] },
   tagText: { color: C.mint, fontSize: 14, fontWeight: '800' },
   phone: { position: 'absolute', right: 28, color: C.ink, fontSize: 93, lineHeight: 103, transform: [{ rotate: '7deg' }] },

@@ -1,4 +1,4 @@
-import { Stack, router } from 'expo-router';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Keyboard, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -7,10 +7,14 @@ import { MedicationRegistryStatus } from '@/components/medication-registry-statu
 import { MedicationScreen, medicationColors as C } from '@/components/medication-screen';
 import { MIN_PENALTY_AMOUNT, validateMedicationInput, type MedicationFieldErrors, type MedicationInput } from '@/features/medications/medication';
 import { useMedicationRegistry } from '@/state/medication-registry-context';
+import { MedicineBoxPicker } from '@/components/medicine-box-picker';
+import { useNfcBox } from '@/state/nfc-box-context';
 
 export default function NewMedicationScreen() {
   const { registerMedication, isLoading, loadError } = useMedicationRegistry();
-  const [input, setInput] = useState<MedicationInput>({ name: '', doseTime: '09:00', penaltyAmount: '' });
+  const { boxId } = useLocalSearchParams<{ boxId?: string }>();
+  const { boxes, loading: boxesLoading, error: boxesError } = useNfcBox();
+  const [input, setInput] = useState<MedicationInput>({ name: '', doseTime: '09:00', penaltyAmount: '', boxId: boxId ?? '' });
   const [errors, setErrors] = useState<MedicationFieldErrors>({});
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -25,6 +29,10 @@ export default function NewMedicationScreen() {
 
   const submit = async () => {
     if (submitting.current || isLoading || loadError) return;
+    if (!boxes.some((box) => String(box.id) === input.boxId)) {
+      setErrors((current) => ({ ...current, boxId: 'お薬を入れる薬箱を選択してください。' }));
+      return;
+    }
     const result = validateMedicationInput(input);
     if (!result.success) {
       setErrors(result.errors);
@@ -46,7 +54,7 @@ export default function NewMedicationScreen() {
     }
   };
 
-  const disabled = isSaving || isLoading || !!loadError;
+  const disabled = isSaving || isLoading || !!loadError || boxesLoading || !!boxesError;
 
   return (
     <MedicationScreen title="薬を登録する" description={"毎日のリズムに合わせて、\nおくすりの時間を決めましょう。"} backTo="/medications" busy={isSaving}>
@@ -102,6 +110,8 @@ export default function NewMedicationScreen() {
         </View>
       </View>
 
+      <MedicineBoxPicker value={input.boxId ?? ''} onChange={(id) => updateInput('boxId', id)} disabled={isSaving} />
+      {!!errors.boxId && <Text accessibilityRole="alert" style={styles.error}>{errors.boxId}</Text>}
       <Text style={styles.notice}>登録した内容はこの端末に保存されます。薬の登録では課金されません。</Text>
       {saveError && <Text accessibilityRole="alert" style={styles.error}>{saveError}</Text>}
       <Pressable

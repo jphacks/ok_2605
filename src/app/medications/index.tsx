@@ -5,9 +5,11 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { MedicationRegistryStatus } from '@/components/medication-registry-status';
 import { MedicationScreen, medicationColors as C } from '@/components/medication-screen';
 import { useMedicationRegistry } from '@/state/medication-registry-context';
+import { useNfcBox } from '@/state/nfc-box-context';
 
 export default function MedicationsScreen() {
   const { medications, isLoading, loadError } = useMedicationRegistry();
+  const { boxes } = useNfcBox();
   const { registered } = useLocalSearchParams<{ registered?: string }>();
   const justRegistered = medications.find((medication) => String(medication.id) === registered);
 
@@ -32,11 +34,12 @@ export default function MedicationsScreen() {
             <View key={medication.id} style={styles.card}>
               <Text style={styles.time}>毎日 {medication.doseTime}</Text>
               <Text style={styles.name}>{medication.name}</Text>
+              <Text style={styles.helper}>▣ {boxes.find((box) => box.medications.some((m) => m.id === medication.id))?.name ?? '薬箱が未選択です'}</Text>
               <View style={styles.divider} />
               <Text style={styles.helper}>ペナルティ設定額</Text>
               <Text style={styles.amount}>{medication.penaltyAmount.toLocaleString('ja-JP')}円</Text>
               <Link href={{ pathname: '/medications/[id]', params: { id: String(medication.id) } }} asChild>
-                <Pressable accessibilityRole="button" style={styles.add}><Text style={styles.addText}>QRコード・編集 ›</Text></Pressable>
+                <Pressable accessibilityRole="button" style={styles.add}><Text style={styles.addText}>お薬の情報・薬箱を編集 ›</Text></Pressable>
               </Link>
               {medication.penaltyAmount < MIN_PENALTY_AMOUNT && <Text style={styles.helper}>最低金額の変更前に登録された設定です。</Text>}
             </View>

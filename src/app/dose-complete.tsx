@@ -6,8 +6,9 @@ import { buildDailySchedule, localDay, nextScheduledDose } from '@/features/medi
 import { doseDeadline } from '@/features/payments/penalty-repository';
 import { useMedicationRegistry } from '@/state/medication-registry-context';
 import { useDoseRecords } from '@/state/dose-record-context';
+import { BunnyArt } from '@/components/nomupay-art';
 
-const C = { ink: '#263e48', muted: '#72848a', mint: '#36b7aa', pale: '#e8f7f4' };
+const C = { ink: '#3b3439', muted: '#93858a', mint: '#f56889', pale: '#fff0f2' };
 
 export default function DoseCompleteScreen() {
   const router = useRouter();
@@ -44,7 +45,7 @@ export default function DoseCompleteScreen() {
             <Text style={styles.time}>{next.day === localDay(now) ? '今日' : '明日'} {next.medication.doseTime}</Text>
           </> : <Text style={styles.note}>次の服薬予定はありません。</Text>}
         </View>
-        <Text style={styles.bear} accessibilityLabel="よろこぶくま">🐻</Text>
+        <BunnyArt />
         <Text style={styles.cheer}>今日もひとつ、よくできました！</Text>
       </ScrollView>
       <View style={styles.footer}>
@@ -57,15 +58,15 @@ export default function DoseCompleteScreen() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f5faf8' },
+  safe: { flex: 1, backgroundColor: '#fff9f6' },
   content: { flexGrow: 1, paddingVertical: 24, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
-  kicker: { color: '#5e9696', fontSize: 10, letterSpacing: 1.5 },
+  kicker: { color: '#d98a9b', fontSize: 10, letterSpacing: 1.5 },
   checkCircle: { width: 92, height: 92, marginTop: 22, borderRadius: 46, backgroundColor: C.mint, alignItems: 'center', justifyContent: 'center', shadowColor: C.mint, shadowOpacity: 0.24, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 5 },
   check: { color: '#fff', fontSize: 49, fontWeight: '800' },
   title: { marginTop: 23, color: C.ink, fontSize: 30, lineHeight: 40, fontWeight: '800' },
   message: { marginTop: 10, color: C.muted, fontSize: 14, lineHeight: 24, textAlign: 'center' },
-  recordCard: { width: '100%', marginTop: 28, padding: 18, borderRadius: 18, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e5eeed', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  nextCard: { width: '100%', marginTop: 16, padding: 18, borderRadius: 18, backgroundColor: '#e8f7f4', gap: 6 },
+  recordCard: { width: '100%', marginTop: 28, padding: 18, borderRadius: 18, backgroundColor: '#fff', borderWidth: 1, borderColor: '#f2e4e4', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  nextCard: { width: '100%', marginTop: 16, padding: 18, borderRadius: 18, backgroundColor: '#fff0f2', gap: 6 },
   label: { color: C.muted, fontSize: 11 },
   name: { marginTop: 5, color: C.ink, fontSize: 15, fontWeight: '700' },
   time: { color: C.mint, fontSize: 23, fontWeight: '800', fontVariant: ['tabular-nums'] },

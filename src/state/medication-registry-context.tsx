@@ -4,6 +4,8 @@ import { getMedicationDatabase } from '@/features/medications/database';
 import type { Medication, MedicationInput } from '@/features/medications/medication';
 import { listMedications, saveMedication } from '@/features/medications/medication-repository';
 import { archiveMedication, editMedication } from '@/features/medications/medication-lifecycle';
+import { assignMedicineBox } from '@/features/boxes/medicine-box-repository';
+import { inTransaction } from '@/features/medications/transaction';
 
 type MedicationRegistry = {
   medications: Medication[];
@@ -59,7 +61,11 @@ export function MedicationRegistryProvider({ children }: PropsWithChildren) {
 
     try {
       const database = await getMedicationDatabase();
-      const saved = await saveMedication(database, input);
+      const saved = await inTransaction(database, async (transaction) => {
+        const medication = await saveMedication(transaction, input);
+        if (input.boxId !== undefined) await assignMedicineBox(transaction, medication.id, Number(input.boxId));
+        return medication;
+      });
       // Publish only after SQLite has confirmed the write, without a fallible second query.
       requestVersion.current += 1;
       setIsLoading(false);

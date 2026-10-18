@@ -186,7 +186,7 @@ const styles = StyleSheet.create({
   detailHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
   detailTitle: { color: C.ink, fontSize: 17, fontWeight: '700' },
   badge: { color: C.muted, backgroundColor: C.pale, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, fontSize: 11 },
-  completeBadge: { color: '#267f73', backgroundColor: '#e4f7f2' },
+  completeBadge: { color: '#c65876', backgroundColor: '#e4f7f2' },
   missedBadge: { color: '#a8423c', backgroundColor: '#fff0ed' },
   historyRow: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1, borderTopColor: C.line, paddingVertical: 14 },
   historyInfo: { flex: 1 },

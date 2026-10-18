@@ -4,7 +4,8 @@ const { createDatabase } = require('./helpers/database.cjs');
 const { initializeMedicationDatabase, saveMedication, listMedications } = require('../src/features/medications/medication-repository.ts');
 const { saveDoseRecord } = require('../src/features/medications/dose-record-repository.ts');
 const { reconcilePenalties, listPenaltyPayments, acknowledgePenalties, retryPenaltyPayment } = require('../src/features/payments/penalty-repository.ts');
-const { editMedication, archiveMedication, medicationQrPayload, listMedicationSchedules } = require('../src/features/medications/medication-lifecycle.ts');
+const { editMedication, archiveMedication, listMedicationSchedules } = require('../src/features/medications/medication-lifecycle.ts');
+const { deviceQrPayload } = require('../src/features/boxes/medicine-box-repository.ts');
 const { confirmQrDose } = require('../src/features/verification/qr-confirmation.ts');
 const { buildHistoryDay } = require('../src/features/medications/medication-history.ts');
 const { listDoseRecordsForDay } = require('../src/features/medications/dose-record-repository.ts');
@@ -86,36 +87,38 @@ test('failure is uncharged, retries preserve amount and cannot settle twice', as
   assert.equal((await db.getFirstAsync('SELECT count(*) AS count FROM penalty_attempts')).count, 2);
 });
 
-test('unique medication QR tokens persist, wrong medication and deadline scans are rejected', async (t) => {
+test('device QR persists, rejects unrelated codes, and confirms only the selected medication within its time window', async (t) => {
   const { db, medication } = await setup(t);
   const other = await saveMedication(db, { name: '別の薬', doseTime: '08:00', penaltyAmount: '100' });
-  const payload = await medicationQrPayload(db, medication.id);
-  const otherPayload = await medicationQrPayload(db, other.id);
-  assert.notEqual(payload, otherPayload);
+  const payload = await deviceQrPayload(db);
   await initializeMedicationDatabase(db);
-  assert.equal(await medicationQrPayload(db, medication.id), payload);
-  await assert.rejects(confirmQrDose(db, medication.id, day, otherPayload, date(18, 8, 1)), /対象のお薬/);
-  await assert.rejects(confirmQrDose(db, medication.id, day, 'nomupay:demo:morning', date(18, 8, 1)), /対象のお薬/);
+  assert.equal(await deviceQrPayload(db), payload);
+  await assert.rejects(confirmQrDose(db, medication.id, day, 'nomupay:medication:v1:old-token', date(18, 8, 1)), /この端末/);
+  await assert.rejects(confirmQrDose(db, medication.id, day, 'nomupay:demo:morning', date(18, 8, 1)), /この端末/);
   await assert.rejects(confirmQrDose(db, medication.id, day, payload, date(18, 7, 59)), /から記録/);
   await assert.rejects(confirmQrDose(db, medication.id, day, payload, date(18, 8, 30)), /期限/);
   assert.deepEqual(await listDoseRecordsForDay(db, day), []);
   const result = await confirmQrDose(db, medication.id, day, payload, date(18, 8, 1));
   assert.equal(result.record.source, 'qr');
   assert.equal((await confirmQrDose(db, medication.id, day, payload, date(18, 8, 2))).record.id, result.record.id);
+  assert.equal((await listDoseRecordsForDay(db, day)).length, 1);
+  const second = await confirmQrDose(db, other.id, day, payload, date(18, 8, 2));
+  assert.equal(second.record.medicationId, other.id);
   assert.equal((await reconcilePenalties(db, date(18, 9))).length, 0);
 });
 
 test('edits and deletion retain original calendar records, QR and penalty amount', async (t) => {
   const { db, medication } = await setup(t);
-  const payload = await medicationQrPayload(db, medication.id);
+  const payload = await deviceQrPayload(db);
   await confirmQrDose(db, medication.id, day, payload, date(18, 8, 1));
   await editMedication(db, medication.id, { name: '新しい名前', doseTime: '09:00', penaltyAmount: '500' }, date(18, 10));
-  assert.equal(await medicationQrPayload(db, medication.id), payload);
+  assert.equal(await deviceQrPayload(db), payload);
   const [payment] = await reconcilePenalties(db, date(19, 10));
   assert.equal(payment.amount, 500); assert.equal(payment.medicationName, '新しい名前');
   await archiveMedication(db, medication.id, date(19, 11));
   assert.deepEqual(await listMedications(db), []);
-  await assert.rejects(medicationQrPayload(db, medication.id), /見つかりません/);
+  assert.equal(await deviceQrPayload(db), payload);
+  await assert.rejects(confirmQrDose(db, medication.id, '2026-10-20', payload, date(20, 9, 1)), /見つかりません/);
   const history = buildHistoryDay(day, await listMedicationSchedules(db), await listDoseRecordsForDay(db, day), '2026-10-20');
   assert.equal(history.status, 'complete'); assert.equal(history.entries[0].medication.name, '朝の薬');
   assert.equal((await reconcilePenalties(db, date(21, 12))).length, 1);
@@ -145,15 +148,15 @@ test('calendar shows today’s penalty and original schedule after a same-day ed
   assert.equal(history.entries[0].medication.doseTime, '08:00');
 });
 
-test('v4 migration retains records and creates stable unique QR identifiers', async (t) => {
+test('v4 migration retains records and the stable device QR identifier', async (t) => {
   const { db, medication } = await setup(t);
   await saveDoseRecord(db, medication.id, day, 'qr', date(18, 8, 1).toISOString());
   await db.execAsync('DROP TRIGGER medication_details_on_insert; DROP TABLE medication_schedules; DROP TABLE medication_details; DROP TABLE penalty_attempts; DROP TABLE penalty_payments; PRAGMA user_version = 4;');
   await initializeMedicationDatabase(db);
   assert.equal((await listDoseRecordsForDay(db, day)).length, 1);
-  const payload = await medicationQrPayload(db, medication.id);
+  const payload = await deviceQrPayload(db);
   await initializeMedicationDatabase(db);
-  assert.equal(await medicationQrPayload(db, medication.id), payload);
+  assert.equal(await deviceQrPayload(db), payload);
   assert.deepEqual(await reconcilePenalties(db, date(18, 9)), []);
 });
 
