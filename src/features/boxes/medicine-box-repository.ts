@@ -41,13 +41,27 @@ export async function initializeMedicineBoxes(db: MedicationDatabase) {
 
 export async function listMedicineBoxes(db: MedicationDatabase): Promise<MedicineBox[]> {
   const boxes = await db.getAllAsync<Omit<MedicineBox, 'medications'>>('SELECT id, name, tag_uid AS tagId FROM medicine_boxes ORDER BY id');
-  const medications = await db.getAllAsync<Medication & { boxId: number }>(`
+  const rows = await db.getAllAsync<Medication & { boxId: number; isPlan: number; rawNotificationsEnabled: number }>(`
     SELECT m.id, m.name, m.dose_time AS doseTime, m.penalty_amount AS penaltyAmount,
-      m.created_at AS createdAt, a.box_id AS boxId
+      m.created_at AS createdAt, a.box_id AS boxId, g.id AS groupId,
+      gd.dose_amount AS doseAmount, g.unit, g.starts_on AS activeStartDay,
+      g.ends_on AS activeEndDay, g.notifications_enabled AS rawNotificationsEnabled,
+      g.is_plan AS isPlan
     FROM medications m JOIN medicine_box_assignments a ON a.medication_id = m.id
     JOIN medication_details d ON d.medication_id = m.id
+    LEFT JOIN medication_group_doses gd ON gd.medication_id = m.id
+    LEFT JOIN medication_groups g ON g.id = gd.group_id
     WHERE d.archived_at IS NULL ORDER BY m.dose_time, m.id
   `);
+  const medications = rows.map((row) => {
+    const { isPlan, rawNotificationsEnabled, ...medication } = row;
+    if (!isPlan) {
+      const { groupId: _groupId, doseAmount: _doseAmount, unit: _unit,
+        activeStartDay: _activeStartDay, activeEndDay: _activeEndDay, ...legacy } = medication;
+      return legacy;
+    }
+    return { ...medication, notificationsEnabled: rawNotificationsEnabled === 1 };
+  });
   return boxes.map((box) => ({ ...box, medications: medications.filter((m) => m.boxId === box.id) }));
 }
 

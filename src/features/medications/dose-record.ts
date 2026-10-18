@@ -1,4 +1,4 @@
-import type { Medication } from './medication.ts';
+import { isMedicationActiveOnDay, type Medication } from './medication.ts';
 
 export type DoseRecordSource = 'qr' | 'demo' | 'nfc';
 
@@ -47,7 +47,7 @@ export function buildDailySchedule(
     records.filter((record) => record.scheduledDay === day).map((record) => [record.medicationId, record]),
   );
 
-  return medications.map((medication) => {
+  return medications.filter((medication) => isMedicationActiveOnDay(medication, day)).map((medication) => {
     const scheduledAt = scheduledDate(day, medication.doseTime);
     const record = recordByMedication.get(medication.id) ?? null;
     return {
@@ -74,9 +74,9 @@ export function nextScheduledDose(
     return { medication: upcoming.medication, scheduledAt: upcoming.scheduledAt, day: localDay(now), due: false };
   }
 
-  const first = medications[0];
-  if (!first) return null;
   const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 12);
   const day = localDay(tomorrow);
+  const first = medications.find((medication) => isMedicationActiveOnDay(medication, day));
+  if (!first) return null;
   return { medication: first, scheduledAt: scheduledDate(day, first.doseTime), day, due: false };
 }

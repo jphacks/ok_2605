@@ -2,14 +2,17 @@ import { DEMO_PAYMENT_SCHEMA } from '../payments/demo-payment-schema.ts';
 import { initializeDoseRecordSchema } from './dose-record-schema.ts';
 import { MEDICATION_LIFECYCLE_SCHEMA } from './medication-lifecycle-schema.ts';
 import { PENALTY_SCHEMA } from '../payments/penalty-schema.ts';
-import { initializeMedicineBoxes } from '../boxes/medicine-box-repository.ts';
+import { assignMedicineBox, initializeMedicineBoxes } from '../boxes/medicine-box-repository.ts';
 import {
   MIN_PENALTY_AMOUNT,
   MedicationValidationError,
   validateMedicationInput,
   type Medication,
   type MedicationInput,
+  type MedicationPlanInput,
 } from './medication.ts';
+import { inTransaction, type TransactionDatabase } from './transaction.ts';
+import { isLocalDay, scheduledDate } from './dose-record.ts';
 
 type MedicationDatabaseValue = string | number | null;
 
@@ -72,6 +75,37 @@ export async function initializeMedicationDatabase(db: MedicationDatabase): Prom
     await db.execAsync(DEMO_PAYMENT_SCHEMA);
     await initializeDoseRecordSchema(db, version?.user_version ?? 0);
     await db.execAsync(MEDICATION_LIFECYCLE_SCHEMA);
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS medication_groups (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        unit TEXT NOT NULL DEFAULT '錠',
+        inventory INTEGER,
+        memo TEXT NOT NULL DEFAULT '',
+        starts_on TEXT NOT NULL,
+        ends_on TEXT,
+        notifications_enabled INTEGER NOT NULL DEFAULT 1 CHECK (notifications_enabled IN (0, 1)),
+        is_plan INTEGER NOT NULL DEFAULT 0 CHECK (is_plan IN (0, 1)),
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS medication_group_doses (
+        medication_id INTEGER PRIMARY KEY REFERENCES medications(id),
+        group_id INTEGER NOT NULL REFERENCES medication_groups(id),
+        dose_amount REAL NOT NULL DEFAULT 1 CHECK (dose_amount > 0)
+      );
+      CREATE TRIGGER IF NOT EXISTS medication_group_on_insert AFTER INSERT ON medications
+      BEGIN
+        INSERT OR IGNORE INTO medication_groups (id, name, starts_on, created_at)
+          VALUES (NEW.id, NEW.name, substr(NEW.created_at, 1, 10), NEW.created_at);
+        INSERT OR IGNORE INTO medication_group_doses (medication_id, group_id, dose_amount)
+          VALUES (NEW.id, NEW.id, 1);
+      END;
+      INSERT OR IGNORE INTO medication_groups (id, name, starts_on, created_at)
+        SELECT id, name, substr(created_at, 1, 10), created_at FROM medications;
+      INSERT OR IGNORE INTO medication_group_doses (medication_id, group_id, dose_amount)
+        SELECT id, id, 1 FROM medications;
+      CREATE INDEX IF NOT EXISTS medication_group_doses_group ON medication_group_doses(group_id, medication_id);
+    `);
     await db.execAsync(PENALTY_SCHEMA);
     await initializeMedicineBoxes(db);
     await db.execAsync(`PRAGMA user_version = ${MEDICATION_DATABASE_VERSION};`);
@@ -83,12 +117,28 @@ export async function initializeMedicationDatabase(db: MedicationDatabase): Prom
 }
 
 export async function listMedications(db: MedicationDatabase): Promise<Medication[]> {
-  return db.getAllAsync<Medication>(`
-    SELECT id, name, dose_time AS doseTime, penalty_amount AS penaltyAmount, created_at AS createdAt
-    FROM medications
-    WHERE id IN (SELECT medication_id FROM medication_details WHERE archived_at IS NULL)
-    ORDER BY dose_time ASC, id ASC
+  const rows = await db.getAllAsync<Medication & {
+    isPlan: number; rawNotificationsEnabled: number;
+  }>(`
+    SELECT m.id, m.name, m.dose_time AS doseTime, m.penalty_amount AS penaltyAmount,
+      m.created_at AS createdAt, g.id AS groupId, gd.dose_amount AS doseAmount,
+      g.unit, g.starts_on AS activeStartDay, g.ends_on AS activeEndDay,
+      g.notifications_enabled AS rawNotificationsEnabled, g.is_plan AS isPlan
+    FROM medications m
+    LEFT JOIN medication_group_doses gd ON gd.medication_id = m.id
+    LEFT JOIN medication_groups g ON g.id = gd.group_id
+    WHERE m.id IN (SELECT medication_id FROM medication_details WHERE archived_at IS NULL)
+    ORDER BY m.dose_time ASC, m.id ASC
   `);
+  return rows.map((row) => {
+    const { isPlan, rawNotificationsEnabled, ...medication } = row;
+    if (!isPlan) {
+      const { groupId: _groupId, doseAmount: _doseAmount, unit: _unit,
+        activeStartDay: _activeStartDay, activeEndDay: _activeEndDay, ...legacy } = medication;
+      return legacy;
+    }
+    return { ...medication, notificationsEnabled: rawNotificationsEnabled === 1 };
+  });
 }
 
 export async function saveMedication(db: MedicationDatabase, input: MedicationInput): Promise<Medication> {
@@ -109,4 +159,77 @@ export async function saveMedication(db: MedicationDatabase, input: MedicationIn
 
   // The INSERT has committed. A separate list query must not turn success into a retryable failure.
   return { id: lastInsertRowId, name, doseTime, penaltyAmount, createdAt };
+}
+
+function followingDay(day: string): string {
+  const date = scheduledDate(day, '12:00');
+  date.setDate(date.getDate() + 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+export async function saveMedicationPlan(db: TransactionDatabase, input: MedicationPlanInput): Promise<Medication[]> {
+  const inventory = input.inventory.trim();
+  const unit = input.unit.trim();
+  if (!input.doses.length) throw new Error('服用時間を1件以上追加してください。');
+  if (!isLocalDay(input.startDay) || (input.endDay !== null && (!isLocalDay(input.endDay) || input.endDay < input.startDay))) {
+    throw new Error('服用期間を確認してください。');
+  }
+  if (!unit || Array.from(unit).length > 20) throw new Error('服用量の単位を入力してください。');
+  if (inventory && (!/^\d+$/.test(inventory) || !Number.isSafeInteger(Number(inventory)))) {
+    throw new Error('在庫は0以上の整数で入力してください。');
+  }
+  if (Array.from(input.memo).length > 500) throw new Error('メモは500文字以内で入力してください。');
+
+  const parsedDoses = input.doses.map((dose) => {
+    const parsed = validateMedicationInput({ name: input.name, doseTime: dose.doseTime, penaltyAmount: input.penaltyAmount });
+    if (!parsed.success) throw new MedicationValidationError(parsed.errors);
+    const normalizedAmount = dose.doseAmount.normalize('NFKC').trim();
+    const doseAmount = Number(normalizedAmount);
+    if (!/^\d+(?:\.\d+)?$/.test(normalizedAmount) || !Number.isFinite(doseAmount) || doseAmount <= 0) {
+      throw new Error('服用量は0より大きい数で入力してください。');
+    }
+    return { ...parsed.value, doseAmount };
+  });
+  if (new Set(parsedDoses.map((dose) => dose.doseTime)).size !== parsedDoses.length) {
+    throw new Error('同じ服用時間が重複しています。');
+  }
+
+  return inTransaction(db, async (transaction) => {
+    const startsAt = scheduledDate(input.startDay, '00:00').toISOString();
+    const saved: Medication[] = [];
+    let groupId = 0;
+    for (const dose of parsedDoses.sort((a, b) => a.doseTime.localeCompare(b.doseTime))) {
+      const inserted = await transaction.runAsync(
+        'INSERT INTO medications (name, dose_time, penalty_amount, created_at) VALUES (?, ?, ?, ?)',
+        dose.name, dose.doseTime, dose.penaltyAmount, startsAt,
+      );
+      const medicationId = inserted.lastInsertRowId;
+      if (!groupId) {
+        groupId = medicationId;
+        await transaction.runAsync(`UPDATE medication_groups SET name = ?, unit = ?, inventory = ?, memo = ?,
+          starts_on = ?, ends_on = ?, notifications_enabled = ?, is_plan = 1, created_at = ? WHERE id = ?`,
+        dose.name, unit, inventory ? Number(inventory) : null, input.memo.trim(), input.startDay, input.endDay,
+        input.notificationsEnabled ? 1 : 0, new Date().toISOString(), groupId);
+      } else {
+        await transaction.runAsync('DELETE FROM medication_group_doses WHERE medication_id = ?', medicationId);
+        await transaction.runAsync('DELETE FROM medication_groups WHERE id = ?', medicationId);
+        await transaction.runAsync('INSERT INTO medication_group_doses (medication_id, group_id, dose_amount) VALUES (?, ?, ?)', medicationId, groupId, dose.doseAmount);
+      }
+      if (medicationId === groupId) {
+        await transaction.runAsync('UPDATE medication_group_doses SET dose_amount = ? WHERE medication_id = ?', dose.doseAmount, medicationId);
+      }
+      const doseEndsAt = input.endDay
+        ? scheduledDate(followingDay(input.endDay), dose.doseTime).toISOString()
+        : null;
+      await transaction.runAsync('UPDATE medication_schedules SET starts_at = ?, ends_at = ? WHERE medication_id = ?', startsAt, doseEndsAt, medicationId);
+      if (input.boxId !== undefined) await assignMedicineBox(transaction, medicationId, Number(input.boxId));
+      saved.push({
+        id: medicationId, name: dose.name, doseTime: dose.doseTime, penaltyAmount: dose.penaltyAmount,
+        createdAt: startsAt, groupId, doseAmount: dose.doseAmount, unit,
+        activeStartDay: input.startDay, activeEndDay: input.endDay,
+        notificationsEnabled: input.notificationsEnabled,
+      });
+    }
+    return saved;
+  });
 }

@@ -10,7 +10,11 @@ export async function confirmQrDose(db: TransactionDatabase, medicationId: numbe
   return inTransaction(db, async (transaction) => {
     const medication = await transaction.getFirstAsync<Medication>(`SELECT m.id, m.name, m.dose_time AS doseTime,
       m.penalty_amount AS penaltyAmount, m.created_at AS createdAt FROM medications m
-      JOIN medication_details d ON d.medication_id = m.id WHERE m.id = ? AND d.archived_at IS NULL`, medicationId);
+      JOIN medication_details d ON d.medication_id = m.id
+      LEFT JOIN medication_group_doses gd ON gd.medication_id = m.id
+      LEFT JOIN medication_groups g ON g.id = gd.group_id
+      WHERE m.id = ? AND d.archived_at IS NULL
+        AND (g.is_plan IS NOT 1 OR (? >= g.starts_on AND (g.ends_on IS NULL OR ? <= g.ends_on)))`, medicationId, day, day);
     if (!medication) throw new Error('登録された薬が見つかりません。');
     if (!demo && payload !== await deviceQrPayload(transaction)) throw new Error('この端末のQRコードではありません。薬箱画面の端末共通QRコードを確認してください。');
     const scheduledAt = scheduledDate(day, medication.doseTime);

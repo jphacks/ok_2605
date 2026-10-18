@@ -1,4 +1,4 @@
-import type { Medication } from '../medications/medication.ts';
+import { isMedicationActiveOnDay, type Medication } from '../medications/medication.ts';
 import type { MedicationDatabase } from '../medications/medication-repository.ts';
 import { inTransaction } from '../medications/transaction.ts';
 import { saveDoseRecord } from '../medications/dose-record-repository.ts';
@@ -89,6 +89,7 @@ export function pendingNfcDoses(box: NfcBox | null, now: Date): NfcDose[] {
   yesterday.setDate(yesterday.getDate() - 1);
   const days = [localDay(yesterday), localDay(now)];
   return box.medications.flatMap((medication) => days.flatMap((day) => {
+    if (!isMedicationActiveOnDay(medication, day)) return [];
     const deadline = doseDeadline(day, medication.doseTime);
     const start = deadline.getTime() - GRACE_MINUTES * 60_000;
     return now.getTime() >= start && now.getTime() < deadline.getTime()

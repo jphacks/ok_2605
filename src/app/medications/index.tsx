@@ -12,6 +12,13 @@ export default function MedicationsScreen() {
   const { boxes } = useNfcBox();
   const { registered } = useLocalSearchParams<{ registered?: string }>();
   const justRegistered = medications.find((medication) => String(medication.id) === registered);
+  const medicationGroups = [...medications.reduce((groups, medication) => {
+    const key = medication.groupId ?? medication.id;
+    const group = groups.get(key) ?? [];
+    group.push(medication);
+    groups.set(key, group);
+    return groups;
+  }, new Map<number, typeof medications>()).values()];
 
   return (
     <MedicationScreen title="登録したおくすり" description="毎日の服用時間とペナルティ金額を確認できます。">
@@ -24,17 +31,21 @@ export default function MedicationsScreen() {
       {!isLoading && !loadError && (
         <>
           {justRegistered && <Text accessibilityRole="alert" style={styles.success}>「{justRegistered.name}」を登録しました。</Text>}
-          <Text style={styles.count}>登録済み {medications.length}件</Text>
+          <Text style={styles.count}>登録済み {medicationGroups.length}件</Text>
           {medications.length === 0 ? (
             <View style={styles.card}>
               <Text style={styles.name}>まだ薬が登録されていません</Text>
               <Text style={styles.helper}>「薬を登録する」から、いつものおくすりを追加しましょう。</Text>
             </View>
-          ) : medications.map((medication) => (
-            <View key={medication.id} style={styles.card}>
-              <Text style={styles.time}>毎日 {medication.doseTime}</Text>
+          ) : medicationGroups.map((group) => {
+            const medication = group[0];
+            return (
+            <View key={medication.groupId ?? medication.id} style={styles.card}>
               <Text style={styles.name}>{medication.name}</Text>
               <Text style={styles.helper}>▣ {boxes.find((box) => box.medications.some((m) => m.id === medication.id))?.name ?? '薬箱が未選択です'}</Text>
+              {group.map((dose) => (
+                <Text key={dose.id} style={styles.time}>毎日 {dose.doseTime}{dose.doseAmount ? `　${dose.doseAmount}${dose.unit ?? ''}` : ''}</Text>
+              ))}
               <View style={styles.divider} />
               <Text style={styles.helper}>ペナルティ設定額</Text>
               <Text style={styles.amount}>{medication.penaltyAmount.toLocaleString('ja-JP')}円</Text>
@@ -43,7 +54,8 @@ export default function MedicationsScreen() {
               </Link>
               {medication.penaltyAmount < MIN_PENALTY_AMOUNT && <Text style={styles.helper}>最低金額の変更前に登録された設定です。</Text>}
             </View>
-          ))}
+            );
+          })}
           <Text style={styles.footnote}>薬の登録では課金されません。</Text>
         </>
       )}

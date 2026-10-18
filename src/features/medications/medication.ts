@@ -7,6 +7,12 @@ export type Medication = {
   doseTime: string;
   penaltyAmount: number;
   createdAt: string;
+  groupId?: number;
+  doseAmount?: number;
+  unit?: string;
+  activeStartDay?: string;
+  activeEndDay?: string | null;
+  notificationsEnabled?: boolean;
 };
 
 export type MedicationInput = {
@@ -22,6 +28,19 @@ export type ValidatedMedicationInput = {
   name: string;
   doseTime: string;
   penaltyAmount: number;
+};
+
+export type MedicationPlanInput = {
+  boxId?: string;
+  name: string;
+  doses: { doseTime: string; doseAmount: string }[];
+  penaltyAmount: string;
+  startDay: string;
+  endDay: string | null;
+  notificationsEnabled: boolean;
+  unit: string;
+  inventory: string;
+  memo: string;
 };
 
 export type MedicationValidationResult =
@@ -74,4 +93,9 @@ export class MedicationValidationError extends Error {
     this.name = 'MedicationValidationError';
     this.errors = errors;
   }
+}
+
+export function isMedicationActiveOnDay(medication: Medication, day: string): boolean {
+  if (!medication.activeStartDay) return true;
+  return day >= medication.activeStartDay && (!medication.activeEndDay || day <= medication.activeEndDay);
 }
