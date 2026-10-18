@@ -29,7 +29,7 @@ export function MedicationScreen({ title, description, backTo = '/', busy = fals
     return () => subscription.remove();
   }, [hideNavigation]));
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView edges={hideNavigation ? undefined : ['top', 'left', 'right']} style={styles.safe}>
       <KeyboardAvoidingView style={styles.safe} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.header}>
           {hideNavigation ? <View style={styles.headerSpace} /> : <Pressable

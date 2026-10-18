@@ -1,4 +1,5 @@
 import { AppNavigation } from '@/components/app-navigation';
+import { TabNavigationProvider } from '@/components/app-bottom-nav';
 import { PaymentSetupProvider } from '@/state/payment-setup-context';
 import { MedicationRegistryProvider } from '@/state/medication-registry-context';
 import { DoseRecordProvider } from '@/state/dose-record-context';
@@ -14,7 +15,7 @@ export default function RootLayout() {
           <ReminderProvider>
             <PaymentSetupProvider>
               <PenaltyProvider>
-                <AppNavigation />
+                <TabNavigationProvider><AppNavigation /></TabNavigationProvider>
               </PenaltyProvider>
             </PaymentSetupProvider>
           </ReminderProvider>

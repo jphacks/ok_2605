@@ -56,7 +56,7 @@ export default function HomeScreen() {
     router.push({ pathname: '/verify', params: { medicationId: String(medicationId), scheduledDay } });
   }
 
-  return <SafeAreaView style={styles.safe}>
+  return <SafeAreaView edges={['top', 'left', 'right']} style={styles.safe}>
     <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.topRow}>
         <Text style={styles.date}>{now.getMonth() + 1}月{now.getDate()}日（{'日月火水木金土'[now.getDay()]}）</Text>

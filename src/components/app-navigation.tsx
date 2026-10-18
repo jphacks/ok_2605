@@ -5,12 +5,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { usePaymentSetup } from '@/state/payment-setup-context';
 import { usePenalties } from '@/state/penalty-context';
 import { medicationColors as C } from './medication-screen';
+import { FixedBottomNav, useTabNavigation } from './app-bottom-nav';
 
 // One coordinator owns redirects so onboarding and overdue notices cannot compete.
 export function AppNavigation() {
   const { setup, loading, error, refresh } = usePaymentSetup();
   const { pending, loading: penaltiesLoading } = usePenalties();
   const pathname = usePathname();
+  const { animation, visible } = useTabNavigation();
   const navigation = useRootNavigationState();
   const initialLoading = loading || !setup || (setup.step === 'complete' && penaltiesLoading);
   const target = !setup ? null : setup.step !== 'complete' ? '/onboarding'
@@ -20,7 +22,13 @@ export function AppNavigation() {
   }, [navigation?.key, initialLoading, error, target, pathname]);
   const blocked = !!error || initialLoading || (target !== null && pathname !== target);
   return <View style={styles.container}>
-    <Stack screenOptions={{ headerShown: false }} />
+    <View style={styles.container}>
+      <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right', animationTypeForReplace: 'push' }}>
+        {['index', 'history', 'medications/index', 'boxes/index', 'explore'].map((name) =>
+          <Stack.Screen key={name} name={name} options={{ animation, gestureEnabled: false }} />)}
+      </Stack>
+    </View>
+    {visible && !blocked && <FixedBottomNav />}
     {blocked && <SafeAreaView style={styles.overlay}>
       {error ? <>
         <Text accessibilityRole="alert" style={styles.error}>{error}</Text>
