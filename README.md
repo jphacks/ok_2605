@@ -347,7 +347,7 @@ iOSはこれまでのXcode・QRデモを継続します。Androidは用途に応
 Android SDK・NDKとJDKが必要です。現在のAndroid開発環境を利用できます。macOS標準のSDK場所を自動検出し、異なる場所は`ANDROID_HOME`で指定してください。
 
 ```bash
-cd /Users/ryusei/JPHACKS/doc/App/ok_2605
+cd /ok_2605
 npm run setup
 
 # 初回のみ、配布担当者が作成する（既存の鍵があれば再利用）
