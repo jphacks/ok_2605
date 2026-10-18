@@ -24,6 +24,7 @@ type ReminderState = {
   sendDemo: (pattern: NotificationPattern | 'all') => Promise<void>;
   notifyPayments: (payments: PenaltyPayment[]) => Promise<void>;
 };
+type PermissionRequest = 'none' | 'initial' | 'explicit';
 const Context = createContext<ReminderState | null>(null);
 
 export function ReminderProvider({ children }: PropsWithChildren) {
@@ -33,10 +34,11 @@ export function ReminderProvider({ children }: PropsWithChildren) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const queue = useRef<Promise<void>>(Promise.resolve());
+  const initialSync = useRef(true);
   const latest = useRef({ medications, isLoading, loadError });
   useEffect(() => { latest.current = { medications, isLoading, loadError }; }, [medications, isLoading, loadError]);
 
-  const synchronize = useCallback((requestPermission = false) => {
+  const synchronize = useCallback((permissionRequest: PermissionRequest = 'none') => {
     const work = queue.current.then(async () => {
       setBusy(true); setError(null);
       try {
@@ -46,7 +48,12 @@ export function ReminderProvider({ children }: PropsWithChildren) {
           });
         }
         let permission = await Notifications.getPermissionsAsync();
-        if (requestPermission && permission.canAskAgain && !permission.granted) {
+        const shouldRequestPermission = !permission.granted && (
+          permissionRequest === 'initial'
+            ? permission.status === 'undetermined'
+            : permissionRequest === 'explicit' && permission.canAskAgain
+        );
+        if (shouldRequestPermission) {
           permission = await Notifications.requestPermissionsAsync({ ios: { allowAlert: true, allowSound: true, allowBadge: false } });
         }
         const allowed = permission.granted || permission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
@@ -83,7 +90,9 @@ export function ReminderProvider({ children }: PropsWithChildren) {
   }, []);
 
   useEffect(() => {
-    void synchronize();
+    const permissionRequest = initialSync.current ? 'initial' : 'none';
+    initialSync.current = false;
+    void synchronize(permissionRequest);
   }, [medications, isLoading, loadError, records, synchronize]);
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => { if (state === 'active') void synchronize(); });
@@ -159,7 +168,7 @@ export function ReminderProvider({ children }: PropsWithChildren) {
     Notifications.clearLastNotificationResponse();
   }, [response, navigation?.key]);
 
-  return <Context.Provider value={{ message, error, busy, enable: () => synchronize(true), refresh: () => synchronize(), sendDemo, notifyPayments }}>{children}</Context.Provider>;
+  return <Context.Provider value={{ message, error, busy, enable: () => synchronize('explicit'), refresh: () => synchronize(), sendDemo, notifyPayments }}>{children}</Context.Provider>;
 }
 
 async function prepareNotifications(requestPermission: boolean) {
