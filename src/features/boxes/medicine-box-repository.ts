@@ -46,7 +46,7 @@ export async function listMedicineBoxes(db: MedicationDatabase): Promise<Medicin
       m.created_at AS createdAt, a.box_id AS boxId, g.id AS groupId,
       gd.dose_amount AS doseAmount, g.unit, g.starts_on AS activeStartDay,
       g.ends_on AS activeEndDay, g.notifications_enabled AS rawNotificationsEnabled,
-      g.is_plan AS isPlan
+      g.grace_minutes AS graceMinutes, g.is_plan AS isPlan
     FROM medications m JOIN medicine_box_assignments a ON a.medication_id = m.id
     JOIN medication_details d ON d.medication_id = m.id
     LEFT JOIN medication_group_doses gd ON gd.medication_id = m.id
@@ -57,7 +57,8 @@ export async function listMedicineBoxes(db: MedicationDatabase): Promise<Medicin
     const { isPlan, rawNotificationsEnabled, ...medication } = row;
     if (!isPlan) {
       const { groupId: _groupId, doseAmount: _doseAmount, unit: _unit,
-        activeStartDay: _activeStartDay, activeEndDay: _activeEndDay, ...legacy } = medication;
+        activeStartDay: _activeStartDay, activeEndDay: _activeEndDay,
+        graceMinutes: _graceMinutes, ...legacy } = medication;
       return legacy;
     }
     return { ...medication, notificationsEnabled: rawNotificationsEnabled === 1 };

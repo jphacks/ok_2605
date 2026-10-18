@@ -13,6 +13,7 @@ export type Medication = {
   activeStartDay?: string;
   activeEndDay?: string | null;
   notificationsEnabled?: boolean;
+  graceMinutes?: number;
 };
 
 export type MedicationInput = {
@@ -41,6 +42,7 @@ export type MedicationPlanInput = {
   unit: string;
   inventory: string;
   memo: string;
+  graceMinutes: number;
 };
 
 export type MedicationValidationResult =

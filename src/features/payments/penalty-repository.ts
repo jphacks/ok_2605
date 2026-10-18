@@ -1,10 +1,42 @@
 import { localDay, scheduledDate } from '../medications/dose-record.ts';
+import { DEFAULT_GRACE_MINUTES, isGraceMinutes, medicationGraceMinutes } from '../medications/grace-period.ts';
+import type { Medication } from '../medications/medication.ts';
 import type { MedicationDatabase } from '../medications/medication-repository.ts';
 import { inTransaction, type TransactionDatabase } from '../medications/transaction.ts';
 
-export const GRACE_MINUTES = 30;
-export function doseDeadline(day: string, time: string): Date {
-  return new Date(scheduledDate(day, time).getTime() + GRACE_MINUTES * 60_000);
+export const GRACE_MINUTES = DEFAULT_GRACE_MINUTES;
+export function doseDeadline(day: string, time: string, graceMinutes = DEFAULT_GRACE_MINUTES): Date {
+  if (!isGraceMinutes(graceMinutes)) throw new Error('執行猶予時間が正しくありません。');
+  return new Date(scheduledDate(day, time).getTime() + graceMinutes * 60_000);
+}
+
+export function doseCountdown(medication: Medication, day: string, now: Date): {
+  phase: 'until-dose' | 'until-penalty' | 'expired'; remainingSeconds: number;
+} {
+  const scheduledAt = scheduledDate(day, medication.doseTime);
+  const deadline = doseDeadline(day, medication.doseTime, medicationGraceMinutes(medication.graceMinutes));
+  const target = now.getTime() < scheduledAt.getTime() ? scheduledAt : deadline;
+  if (now.getTime() >= deadline.getTime()) return { phase: 'expired', remainingSeconds: 0 };
+  return {
+    phase: now.getTime() < scheduledAt.getTime() ? 'until-dose' : 'until-penalty',
+    remainingSeconds: Math.max(0, Math.ceil((target.getTime() - now.getTime()) / 1_000)),
+  };
+}
+
+export function formatDoseCountdown(remainingSeconds: number, showSeconds: boolean): string {
+  const safeSeconds = Number.isFinite(remainingSeconds) ? Math.max(0, Math.ceil(remainingSeconds)) : 0;
+  if (showSeconds) {
+    const minutes = Math.floor(safeSeconds / 60);
+    const seconds = safeSeconds % 60;
+    return minutes > 0 ? `${minutes}分${seconds}秒` : `${seconds}秒`;
+  }
+  const totalMinutes = Math.max(1, Math.ceil(safeSeconds / 60));
+  const days = Math.floor(totalMinutes / (24 * 60));
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) return `${days}日${hours > 0 ? `${hours}時間` : ''}${minutes > 0 ? `${minutes}分` : ''}`;
+  if (hours > 0) return `${hours}時間${minutes > 0 ? `${minutes}分` : ''}`;
+  return `${minutes}分`;
 }
 
 export type PenaltyPayment = {
@@ -15,7 +47,7 @@ export type PenaltyPayment = {
 };
 type Schedule = {
   id: number; medicationId: number; name: string; doseTime: string; penaltyAmount: number;
-  startsAt: string; endsAt: string | null; checkedDay: string | null;
+  graceMinutes: number; startsAt: string; endsAt: string | null; checkedDay: string | null;
 };
 const columns = `id, medication_id AS medicationId, medication_name AS medicationName,
   scheduled_day AS scheduledDay, dose_time AS doseTime, deadline_at AS deadlineAt,
@@ -51,7 +83,7 @@ export async function reconcilePenalties(db: TransactionDatabase, now = new Date
 // Also used before schedule edits/deletion so earlier missed occurrences keep their original amount.
 export async function reconcileInTransaction(db: MedicationDatabase, now: Date, outcome: 'success' | 'failure' = 'success') {
   const schedules = await db.getAllAsync<Schedule>(`SELECT id, medication_id AS medicationId, name,
-    dose_time AS doseTime, penalty_amount AS penaltyAmount, starts_at AS startsAt,
+    dose_time AS doseTime, penalty_amount AS penaltyAmount, grace_minutes AS graceMinutes, starts_at AS startsAt,
     ends_at AS endsAt, checked_day AS checkedDay FROM medication_schedules`);
   const today = localDay(now);
   for (const schedule of schedules) {
@@ -63,7 +95,7 @@ export async function reconcileInTransaction(db: MedicationDatabase, now: Date, 
     // A cursor makes repeated foreground checks independent of the length of saved history.
     while (day <= today) {
       const at = scheduledDate(day, schedule.doseTime);
-      const deadline = doseDeadline(day, schedule.doseTime);
+      const deadline = doseDeadline(day, schedule.doseTime, schedule.graceMinutes);
       if (end && at.getTime() >= end.getTime()) break;
       if (deadline.getTime() > now.getTime()) break;
       if (at.getTime() >= start.getTime() && (!end || deadline.getTime() <= end.getTime())) {

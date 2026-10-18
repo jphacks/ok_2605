@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { buildDailySchedule, localDay, nextScheduledDose } from '@/features/medications/dose-record';
 import { doseDeadline } from '@/features/payments/penalty-repository';
+import { medicationGraceMinutes } from '@/features/medications/grace-period';
 import { useMedicationRegistry } from '@/state/medication-registry-context';
 import { useDoseRecords } from '@/state/dose-record-context';
 import { BunnyArt } from '@/components/nomupay-art';
@@ -22,7 +23,9 @@ export default function DoseCompleteScreen() {
   const { records, isLoading: recordsLoading, loadError: recordsError } = useDoseRecords();
   const now = new Date();
   const schedule = buildDailySchedule(medications, records, now).filter((item) =>
-    item.status !== 'due' || now.getTime() < doseDeadline(localDay(now), item.medication.doseTime).getTime());
+    item.status !== 'due' || now.getTime() < doseDeadline(
+      localDay(now), item.medication.doseTime, medicationGraceMinutes(item.medication.graceMinutes),
+    ).getTime());
   const next = nextScheduledDose(schedule, medications, now);
 
   return (

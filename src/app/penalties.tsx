@@ -16,7 +16,7 @@ export default function PenaltiesScreen() {
     finally { locked.current = false; setBusy(false); }
   }
   return <MedicationScreen title="ペナルティ履歴" description="飲み忘れの判定とテスト決済の結果です。" backTo="/explore" busy={busy}>
-    <View style={styles.card}><Text style={styles.title}>テスト決済・実際の請求なし</Text><Text style={styles.note}>予定時刻から30分の猶予を過ぎた未服用分を、起動時・復帰時に判定します。登録時刻より前の予定は対象になりません。実際のカード決済は接続されていません。</Text></View>
+    <View style={styles.card}><Text style={styles.title}>テスト決済・実際の請求なし</Text><Text style={styles.note}>薬ごとに設定した執行猶予時間を過ぎた未服用分を、起動時・復帰時に判定します。登録時刻より前の予定は対象になりません。実際のカード決済は接続されていません。</Text></View>
     <Pressable accessibilityRole="button" disabled={busy} onPress={() => void refresh()} style={styles.button}><Text style={styles.buttonText}>履歴を再読み込み</Text></Pressable>
     {!!(error || retryError) && <Text accessibilityRole="alert" style={styles.error}>{retryError || error}</Text>}
     {loading && <Text style={styles.note}>読み込み中…</Text>}

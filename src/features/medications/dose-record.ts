@@ -75,8 +75,14 @@ export function nextScheduledDose(
   }
 
   const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 12);
-  const day = localDay(tomorrow);
-  const first = medications.find((medication) => isMedicationActiveOnDay(medication, day));
-  if (!first) return null;
-  return { medication: first, scheduledAt: scheduledDate(day, first.doseTime), day, due: false };
+  const tomorrowDay = localDay(tomorrow);
+  const candidates = medications.flatMap((medication) => {
+    const candidateDay = medication.activeStartDay && medication.activeStartDay > tomorrowDay
+      ? medication.activeStartDay
+      : tomorrowDay;
+    if (!isMedicationActiveOnDay(medication, candidateDay)) return [];
+    return [{ medication, scheduledAt: scheduledDate(candidateDay, medication.doseTime), day: candidateDay }];
+  }).sort((a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime() || a.medication.id - b.medication.id);
+  const first = candidates[0];
+  return first ? { ...first, due: false } : null;
 }
