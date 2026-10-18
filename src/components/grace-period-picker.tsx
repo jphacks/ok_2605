@@ -5,13 +5,15 @@ import { GRACE_MINUTE_OPTIONS } from '@/features/medications/grace-period';
 import { medicationColors as C } from './medication-screen';
 
 function label(minutes: number) {
-  return minutes === 60 ? '1時間' : `${minutes}分`;
+  return minutes === 0 ? 'なし（0分）' : minutes === 60 ? '1時間' : `${minutes}分`;
 }
 
-export function GracePeriodPicker({ value, onChange, disabled = false }: {
+export function GracePeriodPicker({ value, onChange, disabled = false, allowZero = false, accessibilityLabel = '服用予定時刻の後の猶予' }: {
   value: number;
   onChange: (minutes: number) => void;
   disabled?: boolean;
+  allowZero?: boolean;
+  accessibilityLabel?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const open = expanded && !disabled;
@@ -20,7 +22,7 @@ export function GracePeriodPicker({ value, onChange, disabled = false }: {
     <View>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`執行猶予時間：${label(value)}、選択する`}
+        accessibilityLabel={`${accessibilityLabel}：${label(value)}、選択する`}
         accessibilityState={{ expanded: open, disabled }}
         disabled={disabled}
         onPress={() => setExpanded(!open)}
@@ -30,7 +32,7 @@ export function GracePeriodPicker({ value, onChange, disabled = false }: {
       </Pressable>
       {open && (
         <ScrollView style={styles.options} nestedScrollEnabled keyboardShouldPersistTaps="handled">
-          {GRACE_MINUTE_OPTIONS.map((minutes) => (
+          {(allowZero ? [0, ...GRACE_MINUTE_OPTIONS] : GRACE_MINUTE_OPTIONS).map((minutes) => (
             <Pressable
               key={minutes}
               accessibilityRole="button"

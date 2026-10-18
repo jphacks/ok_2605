@@ -1,5 +1,5 @@
 import { localDay, scheduledDate } from '../medications/dose-record.ts';
-import { DEFAULT_GRACE_MINUTES, isGraceMinutes, medicationGraceMinutes } from '../medications/grace-period.ts';
+import { DEFAULT_GRACE_MINUTES, isGraceMinutes, isGraceBeforeMinutes, medicationGraceMinutes, medicationGraceBeforeMinutes } from '../medications/grace-period.ts';
 import type { Medication } from '../medications/medication.ts';
 import type { MedicationDatabase } from '../medications/medication-repository.ts';
 import { inTransaction, type TransactionDatabase } from '../medications/transaction.ts';
@@ -10,10 +10,15 @@ export function doseDeadline(day: string, time: string, graceMinutes = DEFAULT_G
   return new Date(scheduledDate(day, time).getTime() + graceMinutes * 60_000);
 }
 
+export function doseStartsAt(day: string, time: string, beforeMinutes = 0): Date {
+  if (!isGraceBeforeMinutes(beforeMinutes)) throw new Error('前の猶予時間が正しくありません。');
+  return new Date(scheduledDate(day, time).getTime() - beforeMinutes * 60_000);
+}
+
 export function doseCountdown(medication: Medication, day: string, now: Date): {
   phase: 'until-dose' | 'until-penalty' | 'expired'; remainingSeconds: number;
 } {
-  const scheduledAt = scheduledDate(day, medication.doseTime);
+  const scheduledAt = doseStartsAt(day, medication.doseTime, medicationGraceBeforeMinutes(medication.graceBeforeMinutes));
   const deadline = doseDeadline(day, medication.doseTime, medicationGraceMinutes(medication.graceMinutes));
   const target = now.getTime() < scheduledAt.getTime() ? scheduledAt : deadline;
   if (now.getTime() >= deadline.getTime()) return { phase: 'expired', remainingSeconds: 0 };

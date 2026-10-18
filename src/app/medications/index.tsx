@@ -10,8 +10,9 @@ import { useNfcBox } from '@/state/nfc-box-context';
 export default function MedicationsScreen() {
   const { medications, isLoading, loadError } = useMedicationRegistry();
   const { boxes } = useNfcBox();
-  const { registered } = useLocalSearchParams<{ registered?: string }>();
+  const { registered, updated } = useLocalSearchParams<{ registered?: string; updated?: string }>();
   const justRegistered = medications.find((medication) => String(medication.id) === registered);
+  const justUpdated = medications.find((medication) => String(medication.id) === updated);
   const medicationGroups = [...medications.reduce((groups, medication) => {
     const key = medication.groupId ?? medication.id;
     const group = groups.get(key) ?? [];
@@ -31,6 +32,7 @@ export default function MedicationsScreen() {
       {!isLoading && !loadError && (
         <>
           {justRegistered && <Text accessibilityRole="alert" style={styles.success}>「{justRegistered.name}」を登録しました。</Text>}
+          {justUpdated && <Text accessibilityRole="alert" style={styles.success}>「{justUpdated.name}」の変更を保存しました。</Text>}
           <Text style={styles.count}>登録済み {medicationGroups.length}件</Text>
           {medications.length === 0 ? (
             <View style={styles.card}>

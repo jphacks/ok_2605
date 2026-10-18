@@ -32,13 +32,14 @@ export default function HomeScreen() {
   const day = localDay(now);
   const schedule = useMemo(() => buildDailySchedule(medications, records, now), [medications, records, now]);
   const actionable = useMemo(() => schedule.filter((item) => item.status !== 'due' || now.getTime() < doseDeadline(
-    localDay(now), item.medication.doseTime, medicationGraceMinutes(item.medication.graceMinutes),
+    item.scheduledDay, item.medication.doseTime, medicationGraceMinutes(item.medication.graceMinutes),
   ).getTime()), [schedule, now]);
   const next = useMemo(() => nextScheduledDose(actionable, medications, now), [actionable, medications, now]);
   const countdown = useMemo(() => next ? doseCountdown(next.medication, next.day, now) : null, [next, now]);
   const nextBox = next ? boxes.find((box) => box.medications.some((medication) => medication.id === next.medication.id)) : undefined;
-  const taken = schedule.filter((item) => item.status === 'taken').length;
-  const progressUri = useMemo(() => progressImage(schedule.length ? taken / schedule.length : 0), [schedule.length, taken]);
+  const todaySchedule = schedule.filter((item) => item.scheduledDay === day);
+  const taken = todaySchedule.filter((item) => item.status === 'taken').length;
+  const progressUri = useMemo(() => progressImage(todaySchedule.length ? taken / todaySchedule.length : 0), [todaySchedule.length, taken]);
   const loading = medicationsLoading || recordsLoading;
   const hasError = !!medicationsError || !!recordsError;
 
@@ -51,8 +52,8 @@ export default function HomeScreen() {
     return () => { clearInterval(timer); subscription.remove(); };
   }, [refresh]);
 
-  function openScanner(medicationId: number) {
-    router.push({ pathname: '/verify', params: { medicationId: String(medicationId), scheduledDay: day } });
+  function openScanner(medicationId: number, scheduledDay = day) {
+    router.push({ pathname: '/verify', params: { medicationId: String(medicationId), scheduledDay } });
   }
 
   return <SafeAreaView style={styles.safe}>
@@ -63,25 +64,25 @@ export default function HomeScreen() {
       </View>
       <MedicationRegistryStatus />
       {!loading && !hasError && next && countdown && countdown.phase !== 'expired' && <View style={[styles.nextCard, next.due && styles.nextCardDue]}>
-        <Text style={styles.nextLabel}>{next.due ? '服用時間です' : '次に飲むお薬'}</Text>
+        <Text style={styles.nextLabel}>{next.due ? '服用確認を受け付けています' : '次に飲むお薬'}</Text>
         <Text style={styles.nextName}>{next.medication.name}</Text>
         <Text style={styles.nextSchedule}>{next.day === day ? '今日' : `${Number(next.day.slice(5, 7))}月${Number(next.day.slice(8, 10))}日`}　{next.medication.doseTime}</Text>
         <Text style={styles.nextBox}>{nextBox?.name ?? '薬箱未選択'}</Text>
         <Text style={styles.countdown}>
           {countdown.phase === 'until-dose'
-            ? `服用まであと${formatDoseCountdown(countdown.remainingSeconds, false)}`
+            ? `受付開始まであと${formatDoseCountdown(countdown.remainingSeconds, false)}`
             : `課金まであと${formatDoseCountdown(countdown.remainingSeconds, true)}`}
         </Text>
-        {next.due && <Pressable accessibilityRole="button" style={styles.primary} onPress={() => openScanner(next.medication.id)}><Text style={styles.primaryText}>{android ? 'NFCで服用を記録する' : '共通QRで服用を記録する'}</Text></Pressable>}
+        {next.due && <Pressable accessibilityRole="button" style={styles.primary} onPress={() => openScanner(next.medication.id, next.day)}><Text style={styles.primaryText}>{android ? 'NFCで服用を記録する' : '共通QRで服用を記録する'}</Text></Pressable>}
       </View>}
       {!loading && !hasError && <View style={styles.summary}>
         <View style={styles.progressGroup}>
           <Text style={styles.sectionTitle}>今日の服薬</Text>
-          <View accessible accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: Math.max(1, schedule.length), now: taken }} accessibilityLabel={'今日の服薬、' + schedule.length + '件中' + taken + '件完了'} style={styles.ring}>
+          <View accessible accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: Math.max(1, todaySchedule.length), now: taken }} accessibilityLabel={'今日の服薬、' + todaySchedule.length + '件中' + taken + '件完了'} style={styles.ring}>
             <Image source={{ uri: progressUri }} style={StyleSheet.absoluteFill} />
-            <Text style={styles.progressText}>{taken}<Text style={styles.progressTotal}>/{schedule.length}</Text></Text>
+            <Text style={styles.progressText}>{taken}<Text style={styles.progressTotal}>/{todaySchedule.length}</Text></Text>
           </View>
-          <Text style={styles.progressCaption}>{schedule.length > 0 && taken === schedule.length ? '今日の服薬はすべて完了！' : 'できた、を重ねよう。'}</Text>
+          <Text style={styles.progressCaption}>{todaySchedule.length > 0 && taken === todaySchedule.length ? '今日の服薬はすべて完了！' : 'できた、を重ねよう。'}</Text>
         </View>
         <View style={styles.bunny}><BunnyArt /></View>
       </View>}
@@ -98,19 +99,19 @@ export default function HomeScreen() {
         <Pressable accessibilityRole="button" style={styles.primary} onPress={() => router.push('/medications/new')}><Text style={styles.primaryText}>＋ お薬を登録する</Text></Pressable>
       </View>}
       {!loading && !hasError && schedule.length > 0 && <>
-        <View style={styles.sectionRow}><Text style={styles.sectionTitle}>今日のお薬</Text><Pressable accessibilityRole="button" onPress={() => router.push('/history')} style={styles.historyLink}><Text style={styles.link}>履歴を見る ›</Text></Pressable></View>
+        <View style={styles.sectionRow}><Text style={styles.sectionTitle}>服薬予定</Text><Pressable accessibilityRole="button" onPress={() => router.push('/history')} style={styles.historyLink}><Text style={styles.link}>履歴を見る ›</Text></Pressable></View>
         <View style={styles.list}>
           {schedule.map((item) => {
             const isTaken = item.status === 'taken';
             const expired = item.status === 'due' && now.getTime() >= doseDeadline(
-              day, item.medication.doseTime, medicationGraceMinutes(item.medication.graceMinutes),
+              item.scheduledDay, item.medication.doseTime, medicationGraceMinutes(item.medication.graceMinutes),
             ).getTime();
             const canScan = item.status === 'due' && !expired;
             const box = boxes.find((b) => b.medications.some((m) => m.id === item.medication.id));
             const hour = Number(item.medication.doseTime.slice(0, 2));
-            return <Pressable key={item.medication.id} accessibilityRole="button" accessibilityLabel={item.medication.doseTime + ' ' + item.medication.name + '、' + (isTaken ? '服用済み' : expired ? '確認期限終了' : canScan ? '服用を記録する' : '服用時間前')} accessibilityState={{ disabled: !canScan }} disabled={!canScan} onPress={() => openScanner(item.medication.id)} style={styles.doseRow}>
+            return <Pressable key={`${item.medication.id}:${item.scheduledDay}`} accessibilityRole="button" accessibilityLabel={item.medication.doseTime + ' ' + item.medication.name + '、' + (isTaken ? '服用済み' : expired ? '確認期限終了' : canScan ? '服用を記録する' : '服用時間前')} accessibilityState={{ disabled: !canScan }} disabled={!canScan} onPress={() => openScanner(item.medication.id, item.scheduledDay)} style={styles.doseRow}>
               <View style={[styles.timeIcon, hour >= 17 && styles.nightIcon]}><Text style={[styles.sun, hour >= 17 && styles.moon]}>{hour < 17 ? '☀' : '☾'}</Text></View>
-              <View style={{ flex: 1, gap: 5 }}><View style={styles.doseHeading}><Text style={styles.doseTime}>{item.medication.doseTime}</Text><Text style={styles.doseName}>{item.medication.name}</Text></View><Text style={styles.doseNote}>{box?.name ?? '薬箱未選択'}{expired ? ' · 確認期限終了' : canScan ? ' · 服用時間です' : ''}</Text></View>
+              <View style={{ flex: 1, gap: 5 }}><View style={styles.doseHeading}><Text style={styles.doseTime}>{item.scheduledDay !== day ? `${Number(item.scheduledDay.slice(5, 7))}/${Number(item.scheduledDay.slice(8))} ` : ''}{item.medication.doseTime}</Text><Text style={styles.doseName}>{item.medication.name}</Text></View><Text style={styles.doseNote}>{box?.name ?? '薬箱未選択'}{expired ? ' · 確認期限終了' : canScan ? ' · 受付中' : ''}</Text></View>
               <View style={[styles.status, isTaken && styles.statusTaken]}><Text style={[styles.statusText, isTaken && { color: '#fff' }]}>{isTaken ? '✓' : expired ? '!' : ''}</Text></View>
             </Pressable>;
           })}

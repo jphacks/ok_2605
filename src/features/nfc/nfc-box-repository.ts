@@ -2,9 +2,9 @@ import { isMedicationActiveOnDay, type Medication } from '../medications/medicat
 import type { MedicationDatabase } from '../medications/medication-repository.ts';
 import { inTransaction } from '../medications/transaction.ts';
 import { saveDoseRecord } from '../medications/dose-record-repository.ts';
-import { localDay, scheduledDate } from '../medications/dose-record.ts';
-import { medicationGraceMinutes } from '../medications/grace-period.ts';
-import { doseDeadline } from '../payments/penalty-repository.ts';
+import { nearbyScheduledDays } from '../medications/dose-record.ts';
+import { medicationGraceMinutes, medicationGraceBeforeMinutes } from '../medications/grace-period.ts';
+import { doseDeadline, doseStartsAt } from '../payments/penalty-repository.ts';
 import { listMedicineBoxes, type MedicineBox } from '../boxes/medicine-box-repository.ts';
 
 export interface NfcDatabase extends MedicationDatabase {
@@ -72,27 +72,24 @@ async function readBox(db: MedicationDatabase, tagId?: string): Promise<NfcBox |
 
 export async function loadNfcBox(db: NfcDatabase, now = new Date()): Promise<NfcBoxSnapshot> {
   await initializeNfcDatabase(db);
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
+  const days = nearbyScheduledDays(now);
   const records = await db.getAllAsync<NfcDoseRecord>(`
     SELECT d.medication_id AS medicationId, m.name AS medicationName,
       d.scheduled_day AS scheduledDay, m.dose_time AS doseTime, d.taken_at AS confirmedAt
     FROM dose_records d JOIN medications m ON m.id = d.medication_id
     WHERE d.scheduled_day >= ? AND d.scheduled_day <= ?
     ORDER BY d.taken_at DESC
-  `, localDay(yesterday), localDay(now));
+  `, days[0], days[2]);
   return { box: await readBox(db), boxes: await listMedicineBoxes(db), records };
 }
 
 export function pendingNfcDoses(box: NfcBox | null, now: Date): NfcDose[] {
   if (!box || !Number.isFinite(now.getTime())) return [];
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const days = [localDay(yesterday), localDay(now)];
+  const days = nearbyScheduledDays(now);
   return box.medications.flatMap((medication) => days.flatMap((day) => {
     if (!isMedicationActiveOnDay(medication, day)) return [];
     const deadline = doseDeadline(day, medication.doseTime, medicationGraceMinutes(medication.graceMinutes));
-    const start = scheduledDate(day, medication.doseTime).getTime();
+    const start = doseStartsAt(day, medication.doseTime, medicationGraceBeforeMinutes(medication.graceBeforeMinutes)).getTime();
     return now.getTime() >= start && now.getTime() < deadline.getTime()
       ? [{ medication, day, deadline }] : [];
   }));
@@ -128,7 +125,7 @@ export async function confirmNfcDoses(db: NfcDatabase, tagId: string, signal: Ab
     if (!box || tagId !== box.tagId) throw new Error('登録した薬箱のタグではありません。薬箱のタグを確認してください。');
     const now = new Date();
     const doses = pendingNfcDoses(box, now);
-    if (!doses.length) throw new Error('現在、服用確認の対象はありません。登録した服用時刻から30分以内に読み取ってください。');
+    if (!doses.length) throw new Error('現在、服用確認の対象はありません。設定した前後の猶予時間内に読み取ってください。');
     let recorded = 0;
     for (const dose of doses) {
       const existing = await transaction.getFirstAsync('SELECT id FROM dose_records WHERE medication_id = ? AND scheduled_day = ?', dose.medication.id, dose.day);

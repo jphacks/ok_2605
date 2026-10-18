@@ -14,6 +14,7 @@ export type Medication = {
   activeEndDay?: string | null;
   notificationsEnabled?: boolean;
   graceMinutes?: number;
+  graceBeforeMinutes?: number;
 };
 
 export type MedicationInput = {
@@ -34,7 +35,7 @@ export type ValidatedMedicationInput = {
 export type MedicationPlanInput = {
   boxId?: string;
   name: string;
-  doses: { doseTime: string; doseAmount: string }[];
+  doses: { medicationId?: number; doseTime: string; doseAmount: string }[];
   penaltyAmount: string;
   startDay: string;
   endDay: string | null;
@@ -43,6 +44,7 @@ export type MedicationPlanInput = {
   inventory: string;
   memo: string;
   graceMinutes: number;
+  graceBeforeMinutes?: number;
 };
 
 export type MedicationValidationResult =
