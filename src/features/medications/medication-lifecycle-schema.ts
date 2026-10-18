@@ -12,6 +12,7 @@ export const MEDICATION_LIFECYCLE_SCHEMA = `
     dose_time TEXT NOT NULL,
     penalty_amount INTEGER NOT NULL,
     grace_minutes INTEGER NOT NULL DEFAULT 30 CHECK (grace_minutes BETWEEN 5 AND 60 AND grace_minutes % 5 = 0),
+    grace_before_minutes INTEGER NOT NULL DEFAULT 0 CHECK (grace_before_minutes BETWEEN 0 AND 60 AND grace_before_minutes % 5 = 0),
     starts_at TEXT NOT NULL,
     ends_at TEXT,
     checked_day TEXT

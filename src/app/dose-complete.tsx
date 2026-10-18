@@ -24,7 +24,7 @@ export default function DoseCompleteScreen() {
   const now = new Date();
   const schedule = buildDailySchedule(medications, records, now).filter((item) =>
     item.status !== 'due' || now.getTime() < doseDeadline(
-      localDay(now), item.medication.doseTime, medicationGraceMinutes(item.medication.graceMinutes),
+      item.scheduledDay, item.medication.doseTime, medicationGraceMinutes(item.medication.graceMinutes),
     ).getTime());
   const next = nextScheduledDose(schedule, medications, now);
 

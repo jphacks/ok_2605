@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, AppState, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { localDay } from '@/features/medications/dose-record';
+import { nearbyScheduledDays } from '@/features/medications/dose-record';
 import { getMedicationDatabase } from '@/features/medications/database';
 import { confirmQrDose } from './qr-confirmation';
 import { useDoseRecords } from '@/state/dose-record-context';
@@ -14,12 +14,12 @@ export default function QrScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ medicationId?: string; scheduledDay?: string }>();
   const medicationId = Number(params.medicationId);
-  const today = localDay(new Date());
-  const validOccurrence = Number.isSafeInteger(medicationId) && medicationId > 0 && params.scheduledDay === today;
+  const occurrenceDay = params.scheduledDay ?? '';
+  const validOccurrence = Number.isSafeInteger(medicationId) && medicationId > 0 && nearbyScheduledDays(new Date()).includes(occurrenceDay);
   const { medications, isLoading: medicationsLoading } = useMedicationRegistry();
   const { records, isLoading: recordsLoading, refresh } = useDoseRecords();
   const medication = medications.find((item) => item.id === medicationId);
-  const alreadyTaken = records.some((record) => record.medicationId === medicationId && record.scheduledDay === today);
+  const alreadyTaken = records.some((record) => record.medicationId === medicationId && record.scheduledDay === occurrenceDay);
   const [permission, requestPermission, getPermission] = useCameraPermissions();
   const [focused, setFocused] = useState(false);
   const [foreground, setForeground] = useState(AppState.currentState === 'active');
@@ -72,7 +72,7 @@ export default function QrScreen() {
 
   if (medicationsLoading || recordsLoading) return <SafeAreaView style={styles.center}><Text>服薬予定を確認しています…</Text>{cancel}</SafeAreaView>;
   if (!validOccurrence || !medication) return <SafeAreaView style={styles.center}><Text style={styles.title}>服薬予定が見つかりません</Text><Text style={styles.body}>ホーム画面から対象のお薬を選び直してください。</Text>{cancel}</SafeAreaView>;
-  if (alreadyTaken) return <SafeAreaView style={styles.center}><Text style={styles.title}>服用を記録済みです</Text><Text style={styles.body}>{medication.name}は今日の服薬済みとして保存されています。</Text>{cancel}</SafeAreaView>;
+  if (alreadyTaken) return <SafeAreaView style={styles.center}><Text style={styles.title}>服用を記録済みです</Text><Text style={styles.body}>{medication.name}はこの予定日の服薬済みとして保存されています。</Text>{cancel}</SafeAreaView>;
   if (!permission) return <SafeAreaView style={styles.center}><Text>カメラの準備中…</Text>{cancel}</SafeAreaView>;
   if (!permission.granted) return (
     <SafeAreaView style={styles.center}>

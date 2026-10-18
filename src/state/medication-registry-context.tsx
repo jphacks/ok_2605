@@ -4,6 +4,7 @@ import { getMedicationDatabase } from '@/features/medications/database';
 import type { Medication, MedicationInput, MedicationPlanInput } from '@/features/medications/medication';
 import { listMedications, saveMedication, saveMedicationPlan } from '@/features/medications/medication-repository';
 import { archiveMedication, editMedication } from '@/features/medications/medication-lifecycle';
+import { updateMedicationPlan as saveMedicationPlanChanges, archiveMedicationPlan } from '@/features/medications/medication-plan-editor';
 import { assignMedicineBox } from '@/features/boxes/medicine-box-repository';
 import { inTransaction } from '@/features/medications/transaction';
 
@@ -16,6 +17,8 @@ type MedicationRegistry = {
   registerMedicationPlan: (input: MedicationPlanInput) => Promise<Medication[]>;
   updateMedication: (id: number, input: MedicationInput) => Promise<void>;
   deleteMedication: (id: number) => Promise<void>;
+  updateMedicationPlan: (id: number, input: MedicationPlanInput) => Promise<Medication[]>;
+  deleteMedicationPlan: (id: number) => Promise<void>;
 };
 
 const MedicationRegistryContext = createContext<MedicationRegistry | null>(null);
@@ -118,8 +121,33 @@ export function MedicationRegistryProvider({ children }: PropsWithChildren) {
     } finally { isSaving.current = false; }
   };
 
+  const updateMedicationPlan = async (id: number, input: MedicationPlanInput) => {
+    if (isSaving.current || isLoading || loadError) throw new Error('薬の情報を確認してから再試行してください。');
+    const original = medications.find((medication) => medication.id === id);
+    if (!original) throw new Error('薬が見つかりません。');
+    const groupId = original.groupId ?? original.id;
+    isSaving.current = true;
+    try {
+      const saved = await saveMedicationPlanChanges(await getMedicationDatabase(), id, input);
+      requestVersion.current += 1;
+      setMedications((current) => [...current.filter((medication) => (medication.groupId ?? medication.id) !== groupId), ...saved]
+        .sort((a, b) => a.doseTime.localeCompare(b.doseTime) || a.id - b.id));
+      return saved;
+    } finally { isSaving.current = false; }
+  };
+
+  const deleteMedicationPlan = async (id: number) => {
+    if (isSaving.current || isLoading || loadError) throw new Error('薬の情報を確認してから再試行してください。');
+    isSaving.current = true;
+    try {
+      const groupId = await archiveMedicationPlan(await getMedicationDatabase(), id);
+      requestVersion.current += 1;
+      setMedications((current) => current.filter((medication) => (medication.groupId ?? medication.id) !== groupId));
+    } finally { isSaving.current = false; }
+  };
+
   return (
-    <MedicationRegistryContext.Provider value={{ medications, isLoading, loadError, reloadMedications, registerMedication, registerMedicationPlan, updateMedication, deleteMedication }}>
+    <MedicationRegistryContext.Provider value={{ medications, isLoading, loadError, reloadMedications, registerMedication, registerMedicationPlan, updateMedication, deleteMedication, updateMedicationPlan, deleteMedicationPlan }}>
       {children}
     </MedicationRegistryContext.Provider>
   );

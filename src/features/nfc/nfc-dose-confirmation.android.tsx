@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { localDay } from '@/features/medications/dose-record';
+import { nearbyScheduledDays } from '@/features/medications/dose-record';
 import { getMedicationDatabase } from '@/features/medications/database';
 import { useDoseRecords } from '@/state/dose-record-context';
 import { useMedicationRegistry } from '@/state/medication-registry-context';
@@ -17,14 +17,14 @@ export default function NfcDoseConfirmationScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ medicationId?: string; scheduledDay?: string }>();
   const medicationId = Number(params.medicationId);
-  const today = localDay(new Date());
-  const validOccurrence = Number.isSafeInteger(medicationId) && medicationId > 0 && params.scheduledDay === today;
+  const occurrenceDay = params.scheduledDay ?? '';
+  const validOccurrence = Number.isSafeInteger(medicationId) && medicationId > 0 && nearbyScheduledDays(new Date()).includes(occurrenceDay);
   const { medications, isLoading: medicationsLoading } = useMedicationRegistry();
   const { records, isLoading: recordsLoading, refresh: refreshDoseRecords } = useDoseRecords();
   const { boxes, loading: boxLoading, error: boxError, reload } = useNfcBox();
   const box = boxes.find((item) => item.medications.some((m) => m.id === medicationId) && item.tagId);
   const medication = medications.find((item) => item.id === medicationId);
-  const alreadyTaken = records.some((record) => record.medicationId === medicationId && record.scheduledDay === today);
+  const alreadyTaken = records.some((record) => record.medicationId === medicationId && record.scheduledDay === occurrenceDay);
   const boxHasMedication = box?.medications.some((item) => item.id === medicationId) ?? false;
   const [focused, setFocused] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -116,7 +116,7 @@ export default function NfcDoseConfirmationScreen() {
         : state === 'unregistered' ? '薬箱タグの登録が必要です'
           : state === 'box-error' ? '薬箱の情報を読み込めませんでした'
             : '服薬予定が見つかりません';
-    const body = state === 'taken' ? `${medication?.name ?? 'このお薬'}は今日の服薬済みとして保存されています。`
+    const body = state === 'taken' ? `${medication?.name ?? 'このお薬'}はこの予定日の服薬済みとして保存されています。`
       : state === 'unregistered' ? 'このお薬を薬箱に登録してから、もう一度お試しください。'
         : state === 'box-error' ? boxError ?? ''
           : state === 'invalid' ? 'ホーム画面から対象のお薬を選び直してください。' : '';
