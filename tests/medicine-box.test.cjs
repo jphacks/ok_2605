@@ -54,6 +54,26 @@ test('invalid box selection rolls back registration and edits without leaving pa
   for (const name of ['', '   ', 'a'.repeat(41), '\0']) await assert.rejects(createMedicineBox(db, name), /1〜40文字/);
 });
 
+test('web transaction fallback can create a temporary medicine box', async (t) => {
+  const { db } = await setup(t);
+  let exclusiveCalls = 0;
+  let webTransactionCalls = 0;
+  db.withExclusiveTransactionAsync = async () => {
+    exclusiveCalls++;
+    throw new Error('withExclusiveTransactionAsync is not supported on web');
+  };
+  db.withTransactionAsync = async (task) => {
+    webTransactionCalls++;
+    await task();
+  };
+
+  const id = await inTransaction(db, (transaction) => createMedicineBox(transaction, 'Web確認用の薬箱'));
+  assert.equal(id, 1);
+  assert.equal(exclusiveCalls, 1);
+  assert.equal(webTransactionCalls, 1);
+  assert.equal((await listMedicineBoxes(db))[0].name, 'Web確認用の薬箱');
+});
+
 test('NFC verifies the selected medication against its own box and rejects duplicate tags', async (t) => {
   const { db } = await setup(t);
   const first = await createMedicineBox(db, '家');

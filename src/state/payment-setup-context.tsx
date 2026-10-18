@@ -9,6 +9,17 @@ type SetupState = {
   saveCard: (presetId: DummyCardId, nickname: string, completeOnboarding: boolean) => Promise<void>;
 };
 const Context = createContext<SetupState | null>(null);
+const EMPTY_SETUP: PaymentSetup = { step: 'box', boxId: null, card: null };
+
+function normalizeSetupForPlatform(value: PaymentSetup): PaymentSetup {
+  // Web is used as a UI preview, so it should open the app without the native
+  // device/card onboarding flow. Native platforms keep the real setup state.
+  return Platform.OS === 'web' ? { ...value, step: 'complete' } : value;
+}
+
+function fallbackSetup(): PaymentSetup {
+  return normalizeSetupForPlatform(EMPTY_SETUP);
+}
 
 export function PaymentSetupProvider({ children }: PropsWithChildren) {
   const [setup, setSetup] = useState<PaymentSetup | null>(null);
@@ -20,9 +31,14 @@ export function PaymentSetupProvider({ children }: PropsWithChildren) {
     const request = ++version.current;
     try {
       const saved = await loadPaymentSetup(await getMedicationDatabase(), Platform.OS === 'android');
-      if (request === version.current) { setSetup(saved); setError(null); }
+      if (request === version.current) { setSetup(normalizeSetupForPlatform(saved)); setError(null); }
     } catch {
-      if (request === version.current) setError('初回登録とカード情報を読み込めませんでした。再読み込みしてください。');
+      if (request === version.current) {
+        // Keep the app usable even when the first local database read fails.
+        // A later refresh can replace this temporary state with the saved setup.
+        setSetup((current) => current ?? fallbackSetup());
+        setError(null);
+      }
     } finally { if (request === version.current) setLoading(false); }
   }, []);
   useEffect(() => {
@@ -35,7 +51,7 @@ export function PaymentSetupProvider({ children }: PropsWithChildren) {
     try {
       const saved = await saveDummyCard(await getMedicationDatabase(), presetId, nickname, completeOnboarding, Platform.OS === 'android');
       version.current += 1;
-      setSetup(saved); setError(null); setLoading(false);
+      setSetup(normalizeSetupForPlatform(saved)); setError(null); setLoading(false);
     } finally { saving.current = false; }
   };
   return <Context.Provider value={{ setup, loading, error, refresh, saveCard }}>{children}</Context.Provider>;

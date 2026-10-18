@@ -8,12 +8,15 @@ import { getMedicationDatabase } from '@/features/medications/database';
 import { listDoseRecordsBetween } from '@/features/medications/dose-record-repository';
 import { deliverPaymentNotifications } from '@/features/reminders/payment-notifications';
 import type { PenaltyPayment } from '@/features/payments/penalty-repository';
+import { useNativeNotificationResponse } from '@/hooks/use-native-notification-response';
 import { useMedicationRegistry } from './medication-registry-context';
 import { useDoseRecords } from './dose-record-context';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }),
-});
+if (Platform.OS !== 'web') {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }),
+  });
+}
 
 type ReminderState = {
   message: string;
@@ -40,6 +43,10 @@ export function ReminderProvider({ children }: PropsWithChildren) {
     const work = queue.current.then(async () => {
       setBusy(true); setError(null);
       try {
+        if (Platform.OS === 'web') {
+          setMessage('Web版では通知機能を利用できません。');
+          return;
+        }
         if (Platform.OS === 'android') {
           await Notifications.setNotificationChannelAsync('medication-reminders', {
             name: '服薬リマインダー', importance: Notifications.AndroidImportance.HIGH,
@@ -129,7 +136,7 @@ export function ReminderProvider({ children }: PropsWithChildren) {
     return work;
   }, []);
 
-  const response = Notifications.useLastNotificationResponse();
+  const response = useNativeNotificationResponse();
   const navigation = useRootNavigationState();
   const handled = useRef<string | null>(null);
   useEffect(() => {

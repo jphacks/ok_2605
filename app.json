@@ -9,14 +9,18 @@
     "userInterfaceStyle": "light",
     "platforms": [
       "ios",
-      "android"
+      "android",
+      "web"
     ],
     "ios": {
       "icon": "./assets/expo.icon",
       "bundleIdentifier": "jp.jphacks.ok2605"
     },
     "android": {
-      "blockedPermissions": ["android.permission.CAMERA", "android.permission.RECORD_AUDIO"],
+      "blockedPermissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -27,12 +31,20 @@
       "package": "jp.jphacks.ok2605"
     },
     "web": {
-      "output": "server",
+      "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
       "./plugins/with-demo-platforms",
-      "expo-router",
+      [
+        "expo-router",
+        {
+          "headers": {
+            "Cross-Origin-Embedder-Policy": "credentialless",
+            "Cross-Origin-Opener-Policy": "same-origin"
+          }
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -66,6 +78,17 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {
+        "headers": {
+          "Cross-Origin-Embedder-Policy": "credentialless",
+          "Cross-Origin-Opener-Policy": "same-origin"
+        }
+      },
+      "eas": {
+        "projectId": "1be98963-ee4a-4001-8e08-9266de3f2c03"
+      }
     }
   }
 }
