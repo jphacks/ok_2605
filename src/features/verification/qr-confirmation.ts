@@ -1,9 +1,9 @@
 import { nearbyScheduledDays } from '../medications/dose-record.ts';
 import { saveDoseRecord } from '../medications/dose-record-repository.ts';
 import { deviceQrPayload, listMedicineBoxes } from '../boxes/medicine-box-repository.ts';
-import { isMedicationActiveOnDay, type Medication } from '../medications/medication.ts';
+import type { Medication } from '../medications/medication.ts';
 import { inTransaction, type TransactionDatabase } from '../medications/transaction.ts';
-import { doseDeadline, doseStartsAt } from '../payments/penalty-repository.ts';
+import { confirmableDoses, doseDeadline, doseStartsAt } from '../medications/dose-timing.ts';
 import { medicationGraceMinutes, medicationGraceBeforeMinutes } from '../medications/grace-period.ts';
 
 export async function confirmQrDose(db: TransactionDatabase, medicationId: number, day: string, payload: string, now = new Date(), demo = false) {
@@ -25,10 +25,10 @@ export async function confirmQrDose(db: TransactionDatabase, medicationId: numbe
     const record = await saveDoseRecord(transaction, medicationId, day, demo ? 'demo' : 'qr', now.toISOString());
     const boxes = await listMedicineBoxes(transaction);
     const box = boxes.find((box) => box.medications.some((member) => member.id === medicationId));
-    const members = box ? box.medications.filter((member) => member.doseTime === medication.doseTime
-      && isMedicationActiveOnDay(member, day)
-      && now.getTime() >= doseStartsAt(day, member.doseTime, medicationGraceBeforeMinutes(member.graceBeforeMinutes)).getTime()
-      && now.getTime() < doseDeadline(day, member.doseTime, medicationGraceMinutes(member.graceMinutes)).getTime()) : [medication];
+    const members = box
+      ? confirmableDoses(box.medications.filter((member) => member.doseTime === medication.doseTime), now, [day])
+        .map((dose) => dose.medication)
+      : [medication];
     for (const member of members) {
       if (member.id !== medicationId) await saveDoseRecord(transaction, member.id, day, demo ? 'demo' : 'qr', now.toISOString());
     }

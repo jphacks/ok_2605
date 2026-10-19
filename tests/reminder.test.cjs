@@ -91,7 +91,7 @@ test('all demo patterns are explicitly marked and work with no registered medica
 });
 test('successful payment notifications persist receipts, skip failures and retry failed sends', async t => {
   const { db, close } = createDatabase(); t.after(close);
-  const payment = { id: 1, medicationId: 1, medicationName: '朝の薬', doseTime: '08:05', amount: 100, scheduledDay: day, status: 'succeeded', acknowledgedAt: null };
+  const payment = { id: 1, medicationId: 1, medicationName: '朝の薬', doseTime: '08:05', amount: 100, scheduledDay: day, deadlineAt: new Date(2026, 9, 18, 8, 35).toISOString(), status: 'succeeded', acknowledgedAt: null };
   const sent = [];
   const send = async (id, content) => sent.push({ id, content });
   await deliverPaymentNotifications(db, [{ ...payment, status: 'failed' }], send);

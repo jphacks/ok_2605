@@ -1,6 +1,8 @@
 import { isMedicationActiveOnDay, type Medication } from '../medications/medication.ts';
-import { localDay, scheduledDate, type DoseRecord } from '../medications/dose-record.ts';
-import { doseDeadline, type PenaltyPayment } from '../payments/penalty-repository.ts';
+import type { DoseRecord } from '../medications/dose-record.ts';
+import { localDay, scheduledDate } from '../medications/local-date.ts';
+import { doseDeadline } from '../medications/dose-timing.ts';
+import type { PenaltyPaymentGroup } from '../payments/penalty-groups.ts';
 
 export const REMINDER_KIND = 'medication-reminder';
 export const REMINDER_PREFIX = 'nomupay:reminder:';
@@ -31,8 +33,22 @@ export function notificationContent(pattern: NotificationPattern, medication: Pi
   };
 }
 
-export function paymentNotificationContent(payment: PenaltyPayment) {
-  return notificationContent('charged', { id: payment.medicationId, name: payment.medicationName, doseTime: payment.doseTime, penaltyAmount: payment.amount }, payment.scheduledDay);
+export function paymentNotificationContent(group: PenaltyPaymentGroup) {
+  const charged = group.payments.filter((payment) => payment.status === 'succeeded');
+  return {
+    title: 'のむペイ｜テスト決済が完了しました',
+    body: `${charged.map((payment) => payment.medicationName).join('・')}：合計${group.totalAmount.toLocaleString('ja-JP')}円のテスト決済が完了しました。実際の請求はありません。`,
+    sound: 'default',
+    data: {
+      kind: REMINDER_KIND,
+      pattern: 'charged',
+      paymentIds: charged.map((payment) => payment.id),
+      medicationIds: charged.map((payment) => payment.medicationId),
+      deadlineAt: group.deadlineAt,
+      demo: false,
+      version: 2,
+    },
+  };
 }
 
 export function reminderRequest(medication: Medication, day: string, pattern: 'before-dose' | 'at-dose' | 'before-penalty') {

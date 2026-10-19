@@ -1,38 +1,14 @@
 const assert = require('node:assert/strict');
-const { DatabaseSync } = require('node:sqlite');
+const { createDatabase } = require('./helpers/database.cjs');
 const { test } = require('node:test');
 
 const { listDoseRecordsForDay } = require('../src/features/medications/dose-record-repository.ts');
 const { initializeMedicationDatabase, saveMedication } = require('../src/features/medications/medication-repository.ts');
 const { confirmNfcDose, loadNfcBox, saveNfcBox } = require('../src/features/nfc/nfc-box-repository.ts');
 
-function createDatabase() {
-  const connection = new DatabaseSync(':memory:');
-  const db = {
-    async execAsync(source) { connection.exec(source); },
-    async runAsync(source, ...params) {
-      const result = connection.prepare(source).run(...params);
-      return { lastInsertRowId: Number(result.lastInsertRowid), changes: Number(result.changes) };
-    },
-    async getAllAsync(source, ...params) {
-      return connection.prepare(source).all(...params).map((row) => ({ ...row }));
-    },
-    async getFirstAsync(source, ...params) {
-      const row = connection.prepare(source).get(...params);
-      return row ? { ...row } : null;
-    },
-    async withExclusiveTransactionAsync(task) {
-      connection.exec('BEGIN IMMEDIATE');
-      try { await task(db); connection.exec('COMMIT'); }
-      catch (error) { connection.exec('ROLLBACK'); throw error; }
-    },
-  };
-  return { connection, db };
-}
-
 test('focused NFC confirmation records only the medication selected on home', async (context) => {
-  const { connection, db } = createDatabase();
-  context.after(() => connection.close());
+  const { close, db } = createDatabase();
+  context.after(close);
   await initializeMedicationDatabase(db);
   const first = await saveMedication(db, { name: '朝の薬', doseTime: '08:00', penaltyAmount: '300' });
   const second = await saveMedication(db, { name: 'サプリ', doseTime: '08:05', penaltyAmount: '300' });
@@ -54,8 +30,8 @@ test('focused NFC confirmation records only the medication selected on home', as
 });
 
 test('focused NFC confirmation rejects another tag and leaves no dose record', async (context) => {
-  const { connection, db } = createDatabase();
-  context.after(() => connection.close());
+  const { close, db } = createDatabase();
+  context.after(close);
   await initializeMedicationDatabase(db);
   const medication = await saveMedication(db, { name: '朝の薬', doseTime: '08:00', penaltyAmount: '300' });
   const signal = new AbortController().signal;
@@ -73,8 +49,8 @@ test('focused NFC confirmation rejects another tag and leaves no dose record', a
 });
 
 test('a medication added after box registration is linked automatically', async (context) => {
-  const { connection, db } = createDatabase();
-  context.after(() => connection.close());
+  const { close, db } = createDatabase();
+  context.after(close);
   await initializeMedicationDatabase(db);
   const signal = new AbortController().signal;
 

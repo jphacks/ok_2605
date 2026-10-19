@@ -13,7 +13,7 @@ import { medicationGraceMinutes } from '@/features/medications/grace-period';
 import { useDoseRecords } from '@/state/dose-record-context';
 import { useMedicationRegistry } from '@/state/medication-registry-context';
 import { useNfcBox } from '@/state/nfc-box-context';
-import { doseCountdown, doseDeadline, formatDoseCountdown, wasScheduledBeforeDose } from '@/features/payments/penalty-repository';
+import { doseCountdown, doseDeadline, formatDoseCountdown, wasScheduledBeforeDose } from '@/features/medications/dose-timing';
 import { usePenalties } from '@/state/penalty-context';
 
 function progressImage(progress: number) {

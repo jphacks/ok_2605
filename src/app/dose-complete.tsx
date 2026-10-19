@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { buildDailySchedule, localDay } from '@/features/medications/dose-record';
 import { nextScheduledDoseGroup } from '@/features/medications/dose-groups';
 import { useNfcBox } from '@/state/nfc-box-context';
-import { doseDeadline } from '@/features/payments/penalty-repository';
+import { doseDeadline } from '@/features/medications/dose-timing';
 import { medicationGraceMinutes } from '@/features/medications/grace-period';
 import { useMedicationRegistry } from '@/state/medication-registry-context';
 import { useDoseRecords } from '@/state/dose-record-context';

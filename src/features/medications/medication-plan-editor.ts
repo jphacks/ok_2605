@@ -1,7 +1,8 @@
 import { inTransaction, type TransactionDatabase } from './transaction.ts';
-import { listMedications, type MedicationDatabase } from './medication-repository.ts';
-import { followingDay, validateMedicationPlan } from './medication-plan.ts';
-import { localDay, scheduledDate } from './dose-record.ts';
+import { listMedications } from './medication-repository.ts';
+import type { MedicationDatabase } from './database-types.ts';
+import { validateMedicationPlan } from './medication-plan.ts';
+import { followingDay, localDay, scheduledDate } from './local-date.ts';
 import type { Medication, MedicationPlanInput } from './medication.ts';
 import { assignMedicineBox } from '../boxes/medicine-box-repository.ts';
 import { reconcileInTransaction } from '../payments/penalty-repository.ts';

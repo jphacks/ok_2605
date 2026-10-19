@@ -1,15 +1,12 @@
-import { isMedicationActiveOnDay, type Medication } from '../medications/medication.ts';
-import type { MedicationDatabase } from '../medications/medication-repository.ts';
+import type { Medication } from '../medications/medication.ts';
+import type { MedicationDatabase, TransactionDatabase } from '../medications/database-types.ts';
 import { inTransaction } from '../medications/transaction.ts';
-import { saveDoseRecord } from '../medications/dose-record-repository.ts';
+import { hasDoseRecord, saveDoseRecord } from '../medications/dose-record-repository.ts';
 import { nearbyScheduledDays } from '../medications/dose-record.ts';
-import { medicationGraceMinutes, medicationGraceBeforeMinutes } from '../medications/grace-period.ts';
-import { doseDeadline, doseStartsAt } from '../payments/penalty-repository.ts';
+import { confirmableDoses, type ConfirmableDose } from '../medications/dose-timing.ts';
 import { listMedicineBoxes, type MedicineBox } from '../boxes/medicine-box-repository.ts';
 
-export interface NfcDatabase extends MedicationDatabase {
-  withExclusiveTransactionAsync(task: (transaction: MedicationDatabase) => Promise<void>): Promise<void>;
-}
+export type NfcDatabase = TransactionDatabase;
 
 export type NfcBox = { tagId: string; medications: Medication[] };
 export type NfcDoseRecord = {
@@ -20,7 +17,7 @@ export type NfcDoseRecord = {
   confirmedAt: string;
 };
 export type NfcBoxSnapshot = { box: NfcBox | null; boxes: MedicineBox[]; records: NfcDoseRecord[] };
-export type NfcDose = { medication: Medication; day: string; deadline: Date };
+export type NfcDose = ConfirmableDose;
 
 const initialization = new WeakMap<NfcDatabase, Promise<void>>();
 
@@ -91,14 +88,19 @@ export async function loadNfcBox(db: NfcDatabase, now = new Date()): Promise<Nfc
 
 export function pendingNfcDoses(box: NfcBox | null, now: Date): NfcDose[] {
   if (!box || !Number.isFinite(now.getTime())) return [];
-  const days = nearbyScheduledDays(now);
-  return box.medications.flatMap((medication) => days.flatMap((day) => {
-    if (!isMedicationActiveOnDay(medication, day)) return [];
-    const deadline = doseDeadline(day, medication.doseTime, medicationGraceMinutes(medication.graceMinutes));
-    const start = doseStartsAt(day, medication.doseTime, medicationGraceBeforeMinutes(medication.graceBeforeMinutes)).getTime();
-    return now.getTime() >= start && now.getTime() < deadline.getTime()
-      ? [{ medication, day, deadline }] : [];
-  }));
+  return confirmableDoses(box.medications, now);
+}
+
+// Both NFC entry points write the audit row and dose record in their caller's transaction.
+// null means already recorded; zero still means a previously missing dose record was saved.
+async function saveNfcConfirmation(db: MedicationDatabase, dose: NfcDose, tagId: string, confirmedAt: string): Promise<number | null> {
+  if (await hasDoseRecord(db, dose.medication.id, dose.day)) return null;
+  const inserted = await db.runAsync(`INSERT INTO nfc_dose_confirmations
+    (medication_id, scheduled_day, dose_time, medication_name, tag_uid, confirmed_at)
+    VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(medication_id, scheduled_day, dose_time) DO NOTHING`,
+  dose.medication.id, dose.day, dose.medication.doseTime, dose.medication.name, tagId, confirmedAt);
+  await saveDoseRecord(db, dose.medication.id, dose.day, 'nfc', confirmedAt);
+  return inserted.changes;
 }
 
 export async function saveNfcBox(db: NfcDatabase, tagId: string, signal: AbortSignal): Promise<{ linkedMedicationCount: number }> {
@@ -134,14 +136,7 @@ export async function confirmNfcDoses(db: NfcDatabase, tagId: string, signal: Ab
     if (!doses.length) throw new Error('現在、服用確認の対象はありません。設定した前後の猶予時間内に読み取ってください。');
     let recorded = 0;
     for (const dose of doses) {
-      const existing = await transaction.getFirstAsync('SELECT id FROM dose_records WHERE medication_id = ? AND scheduled_day = ?', dose.medication.id, dose.day);
-      if (existing) continue;
-      const inserted = await transaction.runAsync(`INSERT INTO nfc_dose_confirmations
-        (medication_id, scheduled_day, dose_time, medication_name, tag_uid, confirmed_at)
-        VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(medication_id, scheduled_day, dose_time) DO NOTHING`,
-      dose.medication.id, dose.day, dose.medication.doseTime, dose.medication.name, tagId, now.toISOString());
-      await saveDoseRecord(transaction, dose.medication.id, dose.day, 'nfc', now.toISOString());
-      recorded += inserted.changes;
+      recorded += await saveNfcConfirmation(transaction, dose, tagId, now.toISOString()) ?? 0;
     }
     if (signal.aborted) throw new Error('読み取りを中止しました。');
     result = { recorded, alreadyRecorded: doses.length - recorded, names: doses.map((dose) => dose.medication.name) };
@@ -167,31 +162,22 @@ export async function confirmNfcDose(
     const box = await readBox(transaction, tagId);
     if (!box || tagId !== box.tagId) throw new Error('登録した薬箱のタグではありません。薬箱のタグを確認してください。');
 
-    const dose = pendingNfcDoses(box, now).find(
+    const pending = pendingNfcDoses(box, now);
+    const dose = pending.find(
       (candidate) => candidate.medication.id === medicationId && candidate.day === scheduledDay,
     );
     if (!dose) {
       throw new Error('このお薬は現在、服用確認の対象ではありません。ホームで服用時刻を確認してください。');
     }
 
-    const doses = pendingNfcDoses(box, now).filter((candidate) =>
+    const doses = pending.filter((candidate) =>
       candidate.day === scheduledDay && candidate.medication.doseTime === dose.medication.doseTime);
     const names: string[] = [];
     let recorded = false;
     const confirmedAt = now.toISOString();
     for (const member of doses) {
-      const existing = await transaction.getFirstAsync<{ takenAt: string }>(
-        'SELECT taken_at AS takenAt FROM dose_records WHERE medication_id = ? AND scheduled_day = ?',
-        member.medication.id,
-        scheduledDay,
-      );
-      if (existing) continue;
-
-      await transaction.runAsync(`INSERT INTO nfc_dose_confirmations
-        (medication_id, scheduled_day, dose_time, medication_name, tag_uid, confirmed_at)
-        VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(medication_id, scheduled_day, dose_time) DO NOTHING`,
-      member.medication.id, member.day, member.medication.doseTime, member.medication.name, tagId, confirmedAt);
-      await saveDoseRecord(transaction, member.medication.id, member.day, 'nfc', confirmedAt);
+      const changes = await saveNfcConfirmation(transaction, member, tagId, confirmedAt);
+      if (changes === null) continue;
       names.push(member.medication.name);
       recorded = true;
     }

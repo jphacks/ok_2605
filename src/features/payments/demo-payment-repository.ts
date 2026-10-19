@@ -1,5 +1,5 @@
 import { MIN_PENALTY_AMOUNT, type Medication } from '../medications/medication.ts';
-import type { MedicationDatabase } from '../medications/medication-repository.ts';
+import type { MedicationDatabase } from '../medications/database-types.ts';
 import { inTransaction } from '../medications/transaction.ts';
 import { hasDoseRecord } from '../medications/dose-record-repository.ts';
 import {

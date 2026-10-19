@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type PropsWithChildren } from 'react';
 
 import { getMedicationDatabase } from '@/features/medications/database';
-import type { Medication, MedicationInput, MedicationPlanInput } from '@/features/medications/medication';
+import { compareMedicationSchedule, type Medication, type MedicationInput, type MedicationPlanInput } from '@/features/medications/medication';
 import { listMedications, saveMedication, saveMedicationPlan } from '@/features/medications/medication-repository';
 import { archiveMedication, editMedication } from '@/features/medications/medication-lifecycle';
 import { updateMedicationPlan as saveMedicationPlanChanges, archiveMedicationPlan } from '@/features/medications/medication-plan-editor';
@@ -74,9 +74,7 @@ export function MedicationRegistryProvider({ children }: PropsWithChildren) {
       requestVersion.current += 1;
       setIsLoading(false);
       setLoadError(null);
-      setMedications((current) => [...current, saved].sort((a, b) => (
-        a.doseTime.localeCompare(b.doseTime) || a.id - b.id
-      )));
+      setMedications((current) => [...current, saved].sort(compareMedicationSchedule));
       return saved;
     } finally {
       isSaving.current = false;
@@ -92,9 +90,7 @@ export function MedicationRegistryProvider({ children }: PropsWithChildren) {
       requestVersion.current += 1;
       setIsLoading(false);
       setLoadError(null);
-      setMedications((current) => [...current, ...saved].sort((a, b) => (
-        a.doseTime.localeCompare(b.doseTime) || a.id - b.id
-      )));
+      setMedications((current) => [...current, ...saved].sort(compareMedicationSchedule));
       return saved;
     } finally {
       isSaving.current = false;
@@ -107,7 +103,7 @@ export function MedicationRegistryProvider({ children }: PropsWithChildren) {
     try {
       const saved = await editMedication(await getMedicationDatabase(), id, input);
       requestVersion.current += 1;
-      setMedications((current) => current.map((item) => item.id === id ? saved : item).sort((a, b) => a.doseTime.localeCompare(b.doseTime) || a.id - b.id));
+      setMedications((current) => current.map((item) => item.id === id ? saved : item).sort(compareMedicationSchedule));
     } finally { isSaving.current = false; }
   };
 
@@ -131,7 +127,7 @@ export function MedicationRegistryProvider({ children }: PropsWithChildren) {
       const saved = await saveMedicationPlanChanges(await getMedicationDatabase(), id, input);
       requestVersion.current += 1;
       setMedications((current) => [...current.filter((medication) => (medication.groupId ?? medication.id) !== groupId), ...saved]
-        .sort((a, b) => a.doseTime.localeCompare(b.doseTime) || a.id - b.id));
+        .sort(compareMedicationSchedule));
       return saved;
     } finally { isSaving.current = false; }
   };
