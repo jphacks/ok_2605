@@ -1,4 +1,5 @@
-import { router, Stack, usePathname, useRootNavigationState } from 'expo-router';
+import * as Notifications from 'expo-notifications';
+import { router, Stack, useGlobalSearchParams, usePathname, useRootNavigationState } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,17 +7,23 @@ import { usePaymentSetup } from '@/state/payment-setup-context';
 import { usePenalties } from '@/state/penalty-context';
 import { medicationColors as C } from './medication-screen';
 import { FixedBottomNav, useTabNavigation } from './app-bottom-nav';
+import { isDoseReminder, isReminderVerification } from '@/features/verification/verification-entry';
 
 // One coordinator owns redirects so onboarding and overdue notices cannot compete.
 export function AppNavigation() {
   const { setup, loading, error, refresh } = usePaymentSetup();
   const { pending, loading: penaltiesLoading } = usePenalties();
   const pathname = usePathname();
+  const { fromReminder } = useGlobalSearchParams<{ fromReminder?: string }>();
+  const response = Notifications.useLastNotificationResponse();
+  const openingDoseReminder = response?.actionIdentifier === Notifications.DEFAULT_ACTION_IDENTIFIER
+    && isDoseReminder(response.notification.request.content.data);
+  const checkingReminder = openingDoseReminder || isReminderVerification(pathname, fromReminder);
   const { animation, visible } = useTabNavigation();
   const navigation = useRootNavigationState();
   const initialLoading = loading || !setup || (setup.step === 'complete' && penaltiesLoading);
   const target = !setup ? null : setup.step !== 'complete' ? '/onboarding'
-    : pending.length ? '/missed' : pathname === '/onboarding' ? '/' : null;
+    : pending.length && !checkingReminder ? '/missed' : pathname === '/onboarding' ? '/' : null;
   useEffect(() => {
     if (navigation?.key && !initialLoading && !error && target && pathname !== target) router.replace(target);
   }, [navigation?.key, initialLoading, error, target, pathname]);

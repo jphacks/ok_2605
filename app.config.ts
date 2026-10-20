@@ -12,7 +12,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     android: {
       ...config.android,
       package: preview ? 'jp.jphacks.ok2605.preview' : config.android?.package,
-      versionCode: preview ? 10 : config.android?.versionCode,
+      versionCode: preview ? 11 : config.android?.versionCode,
     },
     plugins: [
       ...(config.plugins ?? []).map((plugin) => preview && Array.isArray(plugin) && plugin[0] === 'expo-dev-client'

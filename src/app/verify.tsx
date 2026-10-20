@@ -1,1 +1,1 @@
-export { default } from '@/features/verification/verification-screen';
+export { default } from '@/features/verification/verification-entry-screen';

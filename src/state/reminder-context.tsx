@@ -2,7 +2,7 @@ import * as Notifications from 'expo-notifications';
 import { router, useRootNavigationState } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type PropsWithChildren } from 'react';
 import { AppState, Platform } from 'react-native';
-import { isLocalDay, localDay } from '@/features/medications/dose-record';
+import { localDay } from '@/features/medications/dose-record';
 import { reconcileReminders, dismissTakenReminders, reminderMedicationId, notificationContent, NOTIFICATION_PATTERNS, REMINDER_DAYS, type NotificationPattern } from '@/features/reminders/reminder-plan';
 import { getMedicationDatabase } from '@/features/medications/database';
 import { listDoseRecordsBetween } from '@/features/medications/dose-record-repository';
@@ -12,6 +12,7 @@ import type { PenaltyPayment } from '@/features/payments/penalty-repository';
 import { useMedicationRegistry } from './medication-registry-context';
 import { useDoseRecords } from './dose-record-context';
 import { exactAlarmsAllowed } from '@/features/reminders/android-reminders';
+import { doseReminderDestination, doseReminderOccurrence } from '@/features/verification/dose-reminder-entry';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }),
@@ -50,6 +51,7 @@ export function ReminderProvider({ children }: PropsWithChildren) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [exactAlarmAllowed, setExactAlarmAllowed] = useState<boolean | null>(null);
+  const [foreground, setForeground] = useState(AppState.currentState === 'active');
   const queue = useRef<Promise<void>>(Promise.resolve());
   const initialSync = useRef(true);
   const latest = useRef({ medications, isLoading, loadError });
@@ -107,7 +109,10 @@ export function ReminderProvider({ children }: PropsWithChildren) {
     void synchronize(permissionRequest);
   }, [medications, isLoading, loadError, records, synchronize]);
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', (state) => { if (state === 'active') void synchronize(); });
+    const subscription = AppState.addEventListener('change', (state) => {
+      setForeground(state === 'active');
+      if (state === 'active') void synchronize();
+    });
     return () => subscription.remove();
   }, [synchronize]);
 
@@ -161,8 +166,10 @@ export function ReminderProvider({ children }: PropsWithChildren) {
   const response = Notifications.useLastNotificationResponse();
   const navigation = useRootNavigationState();
   const handled = useRef<string | null>(null);
+  const entryAttempt = useRef(0);
   useEffect(() => {
-    if (!navigation?.key || !response || response.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) return;
+    if (!response) { handled.current = null; return; }
+    if (!foreground || !navigation?.key || response.actionIdentifier !== Notifications.DEFAULT_ACTION_IDENTIFIER) return;
     const notification = response.notification;
     const key = `${notification.request.identifier}:${notification.date}`;
     if (handled.current === key) return;
@@ -177,16 +184,36 @@ export function ReminderProvider({ children }: PropsWithChildren) {
     if (id === null) return;
     // SDK 57 native responses use seconds on iOS and milliseconds on Android.
     const receivedAt = new Date(Platform.OS === 'ios' ? notification.date * 1000 : notification.date);
+    const occurrence = doseReminderOccurrence(data, notification.request.identifier, receivedAt);
+    const attempt = `${Date.now()}:${++entryAttempt.current}`;
+    let active = true;
     handled.current = key;
-    router.replace({
-      pathname: '/verify',
+    const open = (pathname: '/verify' | '/verification-result') => router.replace({
+      pathname,
       params: {
-        medicationId: String(id),
-        scheduledDay: typeof data?.scheduledDay === 'string' && isLocalDay(data.scheduledDay) ? data.scheduledDay : localDay(receivedAt),
+        medicationId: String(occurrence.medicationId),
+        scheduledDay: occurrence.scheduledDay,
+        fromReminder: '1',
+        notificationKey: key,
+        entryAttempt: attempt,
+        ...(occurrence.expectedDoseAt ? { expectedDoseAt: occurrence.expectedDoseAt } : {}),
       },
     });
-    Notifications.clearLastNotificationResponse();
-  }, [response, navigation?.key]);
+    void (async () => {
+      try {
+        const destination = await doseReminderDestination(await getMedicationDatabase(), occurrence);
+        if (active) open(destination);
+      } catch {
+        // Fail closed: the result screen can retry the DB read, never the scan.
+        if (active) open('/verification-result');
+      }
+    })();
+    return () => {
+      active = false;
+      // A background interruption must retry this tap when the app is active.
+      if (handled.current === key) handled.current = null;
+    };
+  }, [foreground, response, navigation?.key]);
 
   return <Context.Provider value={{ message, error, busy, exactAlarmAllowed, enable: () => synchronize('explicit'), refresh: () => synchronize(), sendDemo, notifyPayments }}>{children}</Context.Provider>;
 }

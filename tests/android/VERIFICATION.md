@@ -1,5 +1,48 @@
 # Verification status — 2026-10-20
 
+## Notification-tap expiry routing
+
+Branch: `codex/notification-expiry-routing`, based on fetched `origin/main`
+`36bc99c` (PR #33). Root README.md is unchanged.
+
+- The notification observer now checks the saved occurrence BEFORE selecting a
+  route. Only a ready occurrence targets `/verify`; all other decisions target
+  `/verification-result`, which cannot render NFC/QR. The destination rereads
+  the saved occurrence through the existing transaction queue as a second check.
+- Within the current grace window: open the reader. At/after the deadline:
+  show an unacknowledged payment result, otherwise show the out-of-time message
+  and Home button. An on-time recorded occurrence shows the recorded message.
+- Edited/deleted targets cannot open another time slot. Failed settlements are
+  not retried by tapping a notification. Resuming the reader rechecks the window.
+- Each tap has a fresh entry-attempt key, and losing focus invalidates cached
+  ready state. Legacy identifiers can recover the original occurrence date.
+- Node regression tests: 138/138 passed, including 23 entry/routing cases and
+  three render-only tests for fresh-tap identity and the scanner-free route.
+- TypeScript: passed. ESLint: no errors; one pre-existing unused-variable warning
+  in `tests/nfc-box-repository.test.cjs`.
+- Android and iOS production JS/Hermes exports: passed.
+- Device notification/navigation checks remain required. In particular, tap the
+  original dose-time notification after the deadline, acknowledge its payment,
+  tap it again, and verify that neither attempt starts NFC/QR or settles twice.
+- The user reported that the previous v10 still opened NFC after acknowledging
+  the same medication/day's payment. This device-specific cause has NOT been
+  reproduced locally. Passing repository/render tests do not prove resolution
+  on the user's device; the new v11 requires that same physical-device check.
+
+## Current local v11 APK
+
+- Built with `npm run apk:build`, reusing the existing local native workspace.
+- Output: `dist/nomupay-android.apk` and `dist/nomupay-android-v11.apk`.
+- SHA-256: `320bb35600c4bb0a226b79fae03c88a706ec86bfe04722017fb57dc98a3cb38d`.
+- Package: `jp.jphacks.ok2605.preview`, versionCode 11, min SDK 24, target SDK 36.
+- apksigner verified; certificate SHA-256 matches the previous distribution:
+  `59218baeb6ccd23cf365785a8c167b7b9aabc45d7eb257b5e492f5c6f92b3a59`.
+- APK bundle matches the generated release bundle. Its source map was checked
+  against the current notification observer, destination resolver, guarded entry
+  screen and scanner-free result route. These files are all included/current.
+- Gradle release build passed in 1m 6s; the versioned v10 APK was preserved.
+- No device was connected. No install, commit, push or merge was performed.
+
 ## Current deferred-settlement implementation
 
 The current source uses the standard Expo notification receiver for all four
@@ -34,11 +77,14 @@ Current checks:
 - Updated instrumentation Java: compiled against Android API 36 with Java 17.
 - Actual closed-app OS delivery and iOS system prompt: not device-tested yet.
 
-## Current local v10 APK
+## Historical original v10 build
 
 - Command: `npm run apk:build`. No cloud account or remote build is used.
-- Output: `dist/nomupay-android.apk`, also saved as `dist/nomupay-android-v10.apk`.
-- SHA-256: `5b116776ef9fab9186001792d2cab433eee4ad27c3d15f2159f18530420ebc19`.
+- Original output: `dist/nomupay-android.apk`, also saved as `dist/nomupay-android-v10.apk`.
+- Original SHA-256: `5b116776ef9fab9186001792d2cab433eee4ad27c3d15f2159f18530420ebc19`.
+  Before v11, v10 was rebuilt with the first entry guard (SHA-256
+  `570d7646f6b485f82858136b0f086b29f7b0d102a0bd3d23e78d6be58d07a7a7`).
+  That versioned v10 file is preserved; the unversioned alias now points to v11.
 - Package: `jp.jphacks.ok2605.preview`, versionCode 10, min SDK 24, target SDK 36.
 - Signature verified with Android apksigner. Certificate SHA-256 matches v9:
   `59218baeb6ccd23cf365785a8c167b7b9aabc45d7eb257b5e492f5c6f92b3a59`.
