@@ -3,28 +3,44 @@ import { router, useRootNavigationState } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type PropsWithChildren } from 'react';
 import { AppState, Platform } from 'react-native';
 import { isLocalDay, localDay } from '@/features/medications/dose-record';
-import { reconcileReminders, reminderMedicationId, notificationContent, NOTIFICATION_PATTERNS, REMINDER_DAYS, type NotificationPattern } from '@/features/reminders/reminder-plan';
+import { reconcileReminders, dismissTakenReminders, reminderMedicationId, notificationContent, NOTIFICATION_PATTERNS, REMINDER_DAYS, type NotificationPattern } from '@/features/reminders/reminder-plan';
 import { getMedicationDatabase } from '@/features/medications/database';
 import { listDoseRecordsBetween } from '@/features/medications/dose-record-repository';
+import { createNotificationPermissionRequester, markNotificationPermissionRequested, wasNotificationPermissionRequested, type PermissionRequest } from '@/features/reminders/notification-permission';
 import { deliverPaymentNotifications } from '@/features/reminders/payment-notifications';
 import type { PenaltyPayment } from '@/features/payments/penalty-repository';
 import { useMedicationRegistry } from './medication-registry-context';
 import { useDoseRecords } from './dose-record-context';
+import { exactAlarmsAllowed } from '@/features/reminders/android-reminders';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }),
+});
+
+const requestNotificationPermission = createNotificationPermissionRequester({
+  prepare: async () => {
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('medication-reminders', {
+        name: '服薬リマインダー', importance: Notifications.AndroidImportance.HIGH,
+      });
+    }
+  },
+  get: Notifications.getPermissionsAsync,
+  request: () => Notifications.requestPermissionsAsync({ ios: { allowAlert: true, allowSound: true, allowBadge: false } }),
+  wasRequested: async () => wasNotificationPermissionRequested(await getMedicationDatabase()),
+  markRequested: async () => markNotificationPermissionRequested(await getMedicationDatabase()),
 });
 
 type ReminderState = {
   message: string;
   error: string | null;
   busy: boolean;
+  exactAlarmAllowed: boolean | null;
   enable: () => Promise<void>;
   refresh: () => Promise<void>;
   sendDemo: (pattern: NotificationPattern | 'all') => Promise<void>;
   notifyPayments: (payments: PenaltyPayment[]) => Promise<void>;
 };
-type PermissionRequest = 'none' | 'initial' | 'explicit';
 const Context = createContext<ReminderState | null>(null);
 
 export function ReminderProvider({ children }: PropsWithChildren) {
@@ -33,6 +49,7 @@ export function ReminderProvider({ children }: PropsWithChildren) {
   const [message, setMessage] = useState('通知の設定を確認しています…');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [exactAlarmAllowed, setExactAlarmAllowed] = useState<boolean | null>(null);
   const queue = useRef<Promise<void>>(Promise.resolve());
   const initialSync = useRef(true);
   const latest = useRef({ medications, isLoading, loadError });
@@ -42,20 +59,11 @@ export function ReminderProvider({ children }: PropsWithChildren) {
     const work = queue.current.then(async () => {
       setBusy(true); setError(null);
       try {
-        if (Platform.OS === 'android') {
-          await Notifications.setNotificationChannelAsync('medication-reminders', {
-            name: '服薬リマインダー', importance: Notifications.AndroidImportance.HIGH,
-          });
-        }
-        let permission = await Notifications.getPermissionsAsync();
-        const shouldRequestPermission = !permission.granted && (
-          permissionRequest === 'initial'
-            ? permission.status === 'undetermined'
-            : permissionRequest === 'explicit' && permission.canAskAgain
-        );
-        if (shouldRequestPermission) {
-          permission = await Notifications.requestPermissionsAsync({ ios: { allowAlert: true, allowSound: true, allowBadge: false } });
-        }
+        const permission = await requestNotificationPermission(permissionRequest);
+        // Accuracy settings are optional; their failure must not block ordinary
+        // notifications or cause an Android-only warning on iOS.
+        const exactAllowed = Platform.OS === 'android' ? await exactAlarmsAllowed().catch(() => null) : null;
+        setExactAlarmAllowed(exactAllowed);
         const allowed = permission.granted || permission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
         if (!allowed) {
           setMessage(permission.canAskAgain ? '通知は未許可です。「通知を許可する」で有効にできます。' : '通知が許可されていません。端末の設定で通知を許可してください。');
@@ -78,8 +86,12 @@ export function ReminderProvider({ children }: PropsWithChildren) {
             },
           }),
         }, savedRecords, now);
+        await dismissTakenReminders(savedRecords, {
+          list: async () => (await Notifications.getPresentedNotificationsAsync()).map((notification) => notification.request),
+          dismiss: Notifications.dismissNotificationAsync,
+        });
         const quiet = permission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
-        setMessage(count ? `服用10分前・服用時刻・課金10分前の通知を${count}件予約しました。${quiet ? '現在は通知センターのみへの静かな通知です。' : ''}` : '現在予約できる通知はありません。薬の登録と通知設定をご確認ください。');
+        setMessage(count ? `服用10分前・服用時刻・期限10分前・期限超過の通知を${count}件予約しました。${quiet ? '現在は通知センターのみへの静かな通知です。' : ''}${exactAllowed === false ? '「アラームとリマインダー」が未許可のため、通知が遅れる場合があります。' : ''}` : '現在予約できる通知はありません。薬の登録と通知設定をご確認ください。');
       } catch (cause) {
         setMessage('通知の予約を確認できませんでした。');
         setError(cause instanceof Error ? cause.message : '通知を設定できませんでした。再試行してください。');
@@ -102,9 +114,14 @@ export function ReminderProvider({ children }: PropsWithChildren) {
   const notifyPayments = useCallback((payments: PenaltyPayment[]) => {
     const work = queue.current.then(async () => {
       try {
-        if (!await prepareNotifications(false)) return;
+        if (AppState.currentState !== 'active') return;
+        const permission = await requestNotificationPermission('none');
+        if (!permission.granted && permission.ios?.status !== Notifications.IosAuthorizationStatus.PROVISIONAL) return;
         await deliverPaymentNotifications(await getMedicationDatabase(), payments, (identifier, content) =>
-          Notifications.scheduleNotificationAsync({ identifier, content, trigger: Platform.OS === 'android' ? { channelId: 'medication-reminders' } : null }));
+          Notifications.scheduleNotificationAsync({
+            identifier, content,
+            trigger: Platform.OS === 'android' ? { channelId: 'medication-reminders' } : null,
+          }));
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : '決済結果の通知を送れませんでした。');
       }
@@ -118,7 +135,10 @@ export function ReminderProvider({ children }: PropsWithChildren) {
       setBusy(true); setError(null);
       let sent = 0;
       try {
-        if (!await prepareNotifications(true)) throw new Error('端末の設定で通知を許可してください。');
+        const permission = await requestNotificationPermission('explicit');
+        if (!permission.granted && permission.ios?.status !== Notifications.IosAuthorizationStatus.PROVISIONAL) {
+          throw new Error('端末の設定で通知を許可してください。');
+        }
         const medication = latest.current.medications[0] ?? { id: 0, name: 'デモのお薬', doseTime: '09:00', penaltyAmount: 100 };
         const patterns = pattern === 'all' ? NOTIFICATION_PATTERNS.map((item) => item.value) : [pattern];
         for (const [index, value] of patterns.entries()) {
@@ -147,9 +167,9 @@ export function ReminderProvider({ children }: PropsWithChildren) {
     const key = `${notification.request.identifier}:${notification.date}`;
     if (handled.current === key) return;
     const data = notification.request.content.data;
-    if (data?.kind === 'medication-reminder' && (data.demo === true || data.pattern === 'charged')) {
+    if (data?.kind === 'medication-reminder' && (data.demo === true || data.pattern === 'charged' || data.pattern === 'deadline')) {
       handled.current = key;
-      router.replace(data.demo === true ? '/reminders' : '/penalties');
+      router.replace(data.demo === true ? '/reminders' : data.pattern === 'deadline' ? '/missed' : '/penalties');
       Notifications.clearLastNotificationResponse();
       return;
     }
@@ -168,16 +188,7 @@ export function ReminderProvider({ children }: PropsWithChildren) {
     Notifications.clearLastNotificationResponse();
   }, [response, navigation?.key]);
 
-  return <Context.Provider value={{ message, error, busy, enable: () => synchronize('explicit'), refresh: () => synchronize(), sendDemo, notifyPayments }}>{children}</Context.Provider>;
-}
-
-async function prepareNotifications(requestPermission: boolean) {
-  if (Platform.OS === 'android') await Notifications.setNotificationChannelAsync('medication-reminders', {
-    name: '服薬・決済のお知らせ', importance: Notifications.AndroidImportance.HIGH,
-  });
-  let permission = await Notifications.getPermissionsAsync();
-  if (requestPermission && permission.canAskAgain && !permission.granted) permission = await Notifications.requestPermissionsAsync({ ios: { allowAlert: true, allowSound: true, allowBadge: false } });
-  return permission.granted || permission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL;
+  return <Context.Provider value={{ message, error, busy, exactAlarmAllowed, enable: () => synchronize('explicit'), refresh: () => synchronize(), sendDemo, notifyPayments }}>{children}</Context.Provider>;
 }
 
 export function useReminders() {

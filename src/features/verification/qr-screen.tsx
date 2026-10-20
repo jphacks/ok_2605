@@ -10,6 +10,7 @@ import { confirmQrDose } from './qr-confirmation';
 import { useDoseRecords } from '@/state/dose-record-context';
 import { useMedicationRegistry } from '@/state/medication-registry-context';
 import { useNfcBox } from '@/state/nfc-box-context';
+import { useReminders } from '@/state/reminder-context';
 import { isMedicationActiveOnDay } from '@/features/medications/medication';
 
 export default function QrScreen() {
@@ -22,6 +23,7 @@ export default function QrScreen() {
   const { records, isLoading: recordsLoading, refresh } = useDoseRecords();
   const medication = medications.find((item) => item.id === medicationId);
   const { boxes, reload } = useNfcBox();
+  const { refresh: refreshReminders } = useReminders();
   const box = boxes.find((box) => box.medications.some((item) => item.id === medicationId));
   const names = box?.medications.filter((item) => item.doseTime === medication?.doseTime && isMedicationActiveOnDay(item, occurrenceDay)).map((item) => item.name).join('・') || medication?.name;
   const alreadyTaken = records.some((record) => record.medicationId === medicationId && record.scheduledDay === occurrenceDay);
@@ -66,6 +68,7 @@ export default function QrScreen() {
       if (source === 'demo' && !__DEV__) throw new Error('開発用の操作は利用できません。');
       const result = await confirmQrDose(await getMedicationDatabase(), medication.id, params.scheduledDay ?? '', data, new Date(), source === 'demo');
       await Promise.all([refresh(), reload()]);
+      await refreshReminders();
       if (visible.current) router.replace({ pathname: '/dose-complete', params: { medicationName: result.medications.map((item) => item.name).join('・'), doseTime: result.medication.doseTime } });
     } catch (cause) {
       Alert.alert('服用を記録できませんでした', cause instanceof Error ? cause.message : '保存できませんでした。もう一度お試しください。', [{ text: '確認', onPress: () => { scanLocked.current = false; setScanned(false); } }], { cancelable: false });

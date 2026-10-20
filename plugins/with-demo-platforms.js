@@ -3,6 +3,7 @@ const {
   withEntitlementsPlist,
   withInfoPlist,
   withDangerousMod,
+  withAndroidManifest,
 } = require('expo/config-plugins');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -23,6 +24,17 @@ module.exports = function withDemoPlatforms(config) {
     'android.permission.NFC',
     'android.permission.SCHEDULE_EXACT_ALARM',
   ]);
+  // Remove the retired deadline interceptor's manifest entries during incremental
+  // prebuild too, so existing native caches can be reused without a clean rebuild.
+  config = withAndroidManifest(config, (mod) => {
+    const application = mod.modResults.manifest.application?.[0];
+    if (application?.receiver) application.receiver = application.receiver.filter((receiver) => {
+      const name = receiver.$['android:name'];
+      return name !== 'jp.jphacks.reminders.NomupayNotificationService'
+        && !(name === 'expo.modules.notifications.service.NotificationsService' && receiver.$['tools:node'] === 'remove');
+    });
+    return mod;
+  });
   config = withEntitlementsPlist(config, (mod) => {
     delete mod.modResults['aps-environment'];
     for (const key of Object.keys(mod.modResults)) {
