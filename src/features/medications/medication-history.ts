@@ -1,5 +1,6 @@
-import { isLocalDay, localDay, scheduledDate, type DoseRecord } from './dose-record.ts';
-import type { Medication } from './medication.ts';
+import type { DoseRecord } from './dose-record.ts';
+import { isLocalDay, localDay, scheduledDate } from './local-date.ts';
+import { compareMedicationSchedule, type Medication } from './medication.ts';
 import type { HistoricalMedication } from './medication-lifecycle.ts';
 import type { PenaltyPayment } from '../payments/penalty-repository.ts';
 
@@ -45,7 +46,7 @@ export function buildHistoryDay(
       && Date.parse(item.createdAt) <= scheduledDate(day, item.doseTime).getTime());
     if (snapshot) byId.set(snapshot.id, snapshot);
   }
-  const active = [...byId.values()].sort((a, b) => a.doseTime.localeCompare(b.doseTime) || a.id - b.id);
+  const active = [...byId.values()].sort(compareMedicationSchedule);
   const recordByMedication = new Map(
     records.filter((record) => record.scheduledDay === day).map((record) => [record.medicationId, record]),
   );

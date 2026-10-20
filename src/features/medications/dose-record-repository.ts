@@ -1,4 +1,4 @@
-import type { MedicationDatabase } from './medication-repository.ts';
+import type { MedicationDatabase } from './database-types.ts';
 import { isLocalDay, type DoseRecord, type DoseRecordSource } from './dose-record.ts';
 
 const columns = `id, medication_id AS medicationId, scheduled_day AS scheduledDay,

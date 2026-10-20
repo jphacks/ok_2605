@@ -1,5 +1,5 @@
 import { inTransaction, type TransactionDatabase } from './transaction.ts';
-import type { MedicationDatabase } from './medication-repository.ts';
+import type { MedicationDatabase } from './database-types.ts';
 import { MedicationValidationError, validateMedicationInput, type Medication, type MedicationInput } from './medication.ts';
 import { reconcileInTransaction } from '../payments/penalty-repository.ts';
 import { assignMedicineBox } from '../boxes/medicine-box-repository.ts';

@@ -1,6 +1,6 @@
 import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
 
-import { initializeMedicationDatabase } from './medication-repository';
+import { initializeMedicationDatabase } from './medication-schema';
 
 let databasePromise: Promise<SQLiteDatabase> | undefined;
 

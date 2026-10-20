@@ -1,8 +1,6 @@
-import type { MedicationDatabase } from './medication-repository.ts';
+import type { MedicationDatabase, TransactionDatabase } from './database-types.ts';
 
-export interface TransactionDatabase extends MedicationDatabase {
-  withExclusiveTransactionAsync(task: (transaction: MedicationDatabase) => Promise<void>): Promise<void>;
-}
+export type { TransactionDatabase } from './database-types.ts';
 
 const queues = new WeakMap<TransactionDatabase, Promise<void>>();
 

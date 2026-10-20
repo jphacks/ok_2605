@@ -1,4 +1,4 @@
-import type { MedicationDatabase } from './medication-repository.ts';
+import type { MedicationDatabase } from './database-types.ts';
 
 // Runs inside initializeMedicationDatabase's transaction. Preserve v3 QR/demo records and IDs.
 export async function initializeDoseRecordSchema(db: MedicationDatabase, previousVersion: number): Promise<void> {

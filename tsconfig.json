@@ -12,6 +12,11 @@
       ]
     }
   },
+  "exclude": [
+    "node_modules",
+    "build",
+    "dist"
+  ],
   "include": [
     "**/*.ts",
     "**/*.tsx",

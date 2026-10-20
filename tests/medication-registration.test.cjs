@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const { mkdtemp, rm } = require('node:fs/promises');
 const { dirname, join } = require('node:path');
-const { DatabaseSync } = require('node:sqlite');
+const { createDatabase } = require('./helpers/database.cjs');
 const { test } = require('node:test');
 
 const {
@@ -16,32 +16,6 @@ const {
 } = require('../src/features/medications/medication-repository.ts');
 
 const validInput = { name: '朝のお薬', doseTime: '08:00', penaltyAmount: '100' };
-
-function createDatabase(path = ':memory:') {
-  const connection = new DatabaseSync(path);
-  const db = {
-    async execAsync(source) {
-      connection.exec(source);
-    },
-    async runAsync(source, ...params) {
-      const result = connection.prepare(source).run(...params);
-      return { lastInsertRowId: Number(result.lastInsertRowid), changes: Number(result.changes) };
-    },
-    async getAllAsync(source, ...params) {
-      return connection.prepare(source).all(...params).map((row) => ({ ...row }));
-    },
-    async getFirstAsync(source, ...params) {
-      const row = connection.prepare(source).get(...params);
-      return row ? { ...row } : null;
-    },
-    async withExclusiveTransactionAsync(task) {
-      connection.exec('BEGIN IMMEDIATE');
-      try { await task(db); connection.exec('COMMIT'); }
-      catch (error) { connection.exec('ROLLBACK'); throw error; }
-    },
-  };
-  return { connection, db };
-}
 
 test('registration normalizes time and yen but preserves the medicine name', () => {
   assert.deepEqual(
@@ -99,20 +73,20 @@ test('registered medicines survive a file database close and reopen and remain t
     assert.notEqual(night.id, morning.id);
     assert.notEqual(morning.id, sameTime.id);
     assert.ok(Number.isFinite(Date.parse(morning.createdAt)));
-    database.connection.close();
+    database.close();
     database = createDatabase(file);
     await initializeMedicationDatabase(database.db);
     assert.deepEqual(await listMedications(database.db), [morning, sameTime, night]);
     assert.deepEqual(await database.db.getFirstAsync('PRAGMA user_version'), { user_version: 9 });
   } finally {
-    database?.connection.close();
+    database?.close();
     await rm(directory, { recursive: true, force: true });
   }
 });
 
 test('SQL-looking medicine names are stored as text with parameter binding', async (context) => {
-  const { connection, db } = createDatabase();
-  context.after(() => connection.close());
+  const { close, db } = createDatabase();
+  context.after(close);
   await initializeMedicationDatabase(db);
   const name = "薬'); DROP TABLE medications; --";
   const medication = await saveMedication(db, { ...validInput, name });
@@ -123,8 +97,8 @@ test('SQL-looking medicine names are stored as text with parameter binding', asy
 });
 
 test('database constraints reject invalid stored values', async (context) => {
-  const { connection, db } = createDatabase();
-  context.after(() => connection.close());
+  const { close, db } = createDatabase();
+  context.after(close);
   await initializeMedicationDatabase(db);
   const insert = 'INSERT INTO medications (name, dose_time, penalty_amount, created_at) VALUES (?, ?, ?, ?)';
   const invalidRows = [
@@ -148,8 +122,8 @@ test('database constraints reject invalid stored values', async (context) => {
 });
 
 test('v6 databases gain the grace period and newer schemas remain untouched', async (context) => {
-  const { connection, db } = createDatabase();
-  context.after(() => connection.close());
+  const { close, db } = createDatabase();
+  context.after(close);
   await initializeMedicationDatabase(db);
   const medication = await saveMedication(db, validInput);
   await db.execAsync('ALTER TABLE medication_schedules DROP COLUMN grace_minutes; ALTER TABLE medication_groups DROP COLUMN grace_minutes; PRAGMA user_version = 6;');
@@ -167,8 +141,8 @@ test('v6 databases gain the grace period and newer schemas remain untouched', as
 });
 
 test('repository validates independently and leaves no record after a failed insert', async (context) => {
-  const { connection, db } = createDatabase();
-  context.after(() => connection.close());
+  const { close, db } = createDatabase();
+  context.after(close);
   await initializeMedicationDatabase(db);
   await assert.rejects(saveMedication(db, { ...validInput, name: '' }), MedicationValidationError);
   await db.execAsync("CREATE TRIGGER reject_medication BEFORE INSERT ON medications BEGIN SELECT RAISE(ABORT, 'test failure'); END;");
@@ -177,8 +151,8 @@ test('repository validates independently and leaves no record after a failed ins
 });
 
 test('a committed registration succeeds even when listing is temporarily unavailable', async (context) => {
-  const { connection, db } = createDatabase();
-  context.after(() => connection.close());
+  const { close, db } = createDatabase();
+  context.after(close);
   await initializeMedicationDatabase(db);
   const medication = await saveMedication(
     { ...db, async getAllAsync() { throw new Error('read unavailable'); } },
@@ -189,8 +163,8 @@ test('a committed registration succeeds even when listing is temporarily unavail
 
 
 test('minimum penalty is 100 yen for validation and database writes', async (context) => {
-  const { connection, db } = createDatabase();
-  context.after(() => connection.close());
+  const { close, db } = createDatabase();
+  context.after(close);
   await initializeMedicationDatabase(db);
   assert.equal(validateMedicationInput({ ...validInput, penaltyAmount: '99' }).success, false);
   assert.equal(validateMedicationInput({ ...validInput, penaltyAmount: '100' }).success, true);
@@ -200,8 +174,8 @@ test('minimum penalty is 100 yen for validation and database writes', async (con
 });
 
 test('applying the new minimum preserves older records without raising their amounts', async (context) => {
-  const { connection, db } = createDatabase();
-  context.after(() => connection.close());
+  const { close, db } = createDatabase();
+  context.after(close);
   await initializeMedicationDatabase(db);
   await db.execAsync('DROP TRIGGER medications_minimum_insert;');
   await db.runAsync('INSERT INTO medications (name, dose_time, penalty_amount, created_at) VALUES (?, ?, ?, ?)', '以前の薬', '09:00', 0, '2026-10-17T00:00:00Z');
@@ -213,8 +187,9 @@ test('applying the new minimum preserves older records without raising their amo
 });
 
 test('one medication plan links every dose time and stores its inclusive period', async (context) => {
-  const { connection, db } = createDatabase();
-  context.after(() => connection.close());
+  context.mock.timers.enable({ apis: ['Date'], now: new Date(2026, 9, 19, 12) });
+  const { close, db } = createDatabase();
+  context.after(close);
   await initializeMedicationDatabase(db);
   const saved = await saveMedicationPlan(db, {
     name: '朝夜の薬',
@@ -239,8 +214,11 @@ test('one medication plan links every dose time and stores its inclusive period'
     grace_minutes AS graceMinutes
     FROM medication_schedules ORDER BY medication_id`);
   assert.equal(schedules.length, 2);
-  assert.ok(schedules.every((item) => item.startsAt === '2026-10-19T15:00:00.000Z'));
-  assert.deepEqual(schedules.map((item) => item.endsAt), ['2026-11-18T23:00:00.000Z', '2026-11-19T11:00:00.000Z']);
+  assert.ok(schedules.every((item) => item.startsAt === new Date(2026, 9, 20).toISOString()));
+  assert.deepEqual(schedules.map((item) => item.endsAt), [
+    new Date(2026, 10, 19, 8).toISOString(),
+    new Date(2026, 10, 19, 20).toISOString(),
+  ]);
   assert.ok(schedules.every((item) => item.graceMinutes === 45));
   const groups = await db.getAllAsync('SELECT id, inventory, memo, grace_minutes AS graceMinutes FROM medication_groups WHERE is_plan = 1');
   assert.deepEqual(groups, [{ id: saved[0].groupId, inventory: 90, memo: '食後', graceMinutes: 45 }]);

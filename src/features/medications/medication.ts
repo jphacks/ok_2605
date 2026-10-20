@@ -104,3 +104,10 @@ export function isMedicationActiveOnDay(medication: Medication, day: string): bo
   if (!medication.activeStartDay) return true;
   return day >= medication.activeStartDay && (!medication.activeEndDay || day <= medication.activeEndDay);
 }
+
+export function compareMedicationSchedule(
+  first: Pick<Medication, 'doseTime' | 'id'>,
+  second: Pick<Medication, 'doseTime' | 'id'>,
+): number {
+  return first.doseTime.localeCompare(second.doseTime) || first.id - second.id;
+}

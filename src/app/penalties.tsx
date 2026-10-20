@@ -2,9 +2,11 @@ import { useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { MedicationScreen, medicationColors as C } from '@/components/medication-screen';
 import { usePenalties } from '@/state/penalty-context';
+import { groupPenaltyPayments } from '@/features/payments/penalty-groups';
 
 export default function PenaltiesScreen() {
   const { payments, loading, error, refresh, retry } = usePenalties();
+  const groups = groupPenaltyPayments(payments);
   const [busy, setBusy] = useState(false);
   const [retryError, setRetryError] = useState('');
   const locked = useRef(false);
@@ -21,19 +23,25 @@ export default function PenaltiesScreen() {
     {!!(error || retryError) && <Text accessibilityRole="alert" style={styles.error}>{retryError || error}</Text>}
     {loading && <Text style={styles.note}>読み込み中…</Text>}
     {!loading && !error && !payments.length && <Text style={styles.note}>飲み忘れによるペナルティはありません。</Text>}
-    {payments.map((payment) => <View key={payment.id} style={styles.card}>
-      <Text style={styles.title}>{payment.medicationName}</Text>
-      <Text style={styles.note}>{payment.scheduledDay}　{payment.doseTime}の予定</Text>
-      <Text style={styles.amount}>¥{payment.amount.toLocaleString('ja-JP')}</Text>
-      <Text style={payment.status === 'failed' ? styles.error : styles.title}>{payment.status === 'succeeded' ? 'テスト決済済み（請求なし）' : 'テスト決済失敗（未課金）'}</Text>
-      <Text style={styles.note}>記録日時：{new Date(payment.createdAt).toLocaleString('ja-JP')}</Text>
-      {!!payment.errorMessage && <Text style={styles.error}>{payment.errorMessage}</Text>}
-      {payment.status === 'failed' && <Pressable accessibilityRole="button" disabled={busy} onPress={() => void retryPayment(payment.id)} style={styles.button}><Text style={styles.buttonText}>{busy ? '保存中…' : 'テスト決済を再試行'}</Text></Pressable>}
+    {groups.map((group) => <View key={group.deadlineAt} style={styles.card}>
+      <Text style={styles.title}>課金予定日時：{new Date(group.deadlineAt).toLocaleString('ja-JP')}</Text>
+      <Text style={styles.note}>合計課金額（決済失敗分を除く）</Text>
+      <Text style={styles.amount}>¥{group.totalAmount.toLocaleString('ja-JP')}</Text>
+      {group.payments.map((payment) => <View key={payment.id} style={styles.row}>
+        <Text style={styles.title}>{payment.medicationName}</Text>
+        <Text style={styles.note}>{payment.scheduledDay}　{payment.doseTime}の予定</Text>
+        <Text style={styles.title}>¥{payment.amount.toLocaleString('ja-JP')}</Text>
+        <Text style={payment.status === 'failed' ? styles.error : styles.title}>{payment.status === 'succeeded' ? 'テスト決済済み（請求なし）' : 'テスト決済失敗（未課金）'}</Text>
+        <Text style={styles.note}>記録日時：{new Date(payment.createdAt).toLocaleString('ja-JP')}</Text>
+        {!!payment.errorMessage && <Text style={styles.error}>{payment.errorMessage}</Text>}
+        {payment.status === 'failed' && <Pressable accessibilityRole="button" accessibilityLabel={`${payment.medicationName}のテスト決済を再試行`} disabled={busy} onPress={() => void retryPayment(payment.id)} style={styles.button}><Text style={styles.buttonText}>{busy ? '保存中…' : 'テスト決済を再試行'}</Text></Pressable>}
+      </View>)}
     </View>)}
   </MedicationScreen>;
 }
 const styles = StyleSheet.create({
   card: { backgroundColor: '#fff', borderRadius: 20, padding: 20, gap: 12 },
+  row: { borderTopWidth: 1, borderTopColor: C.line, paddingTop: 12, gap: 8 },
   title: { color: C.ink, fontSize: 14, fontWeight: '700' },
   note: { color: C.muted, fontSize: 12, lineHeight: 22 },
   amount: { color: '#e77760', fontSize: 30, fontWeight: '700' },

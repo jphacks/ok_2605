@@ -52,3 +52,11 @@ example
 
 # Project-local npm cache
 .npm-cache/
+
+# Local APK build cache and private distribution signing credentials
+/build/
+/.android-signing/
+/credentials.json
+*.keystore
+*.apk
+*.aab

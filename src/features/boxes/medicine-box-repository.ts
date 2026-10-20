@@ -1,5 +1,5 @@
 import type { Medication } from '../medications/medication.ts';
-import type { MedicationDatabase } from '../medications/medication-repository.ts';
+import type { MedicationDatabase } from '../medications/database-types.ts';
 
 export type MedicineBox = { id: number; name: string; tagId: string | null; medications: Medication[] };
 

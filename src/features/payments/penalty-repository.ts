@@ -1,52 +1,17 @@
-import { localDay, scheduledDate } from '../medications/dose-record.ts';
-import { DEFAULT_GRACE_MINUTES, isGraceMinutes, isGraceBeforeMinutes, medicationGraceMinutes } from '../medications/grace-period.ts';
-import type { Medication } from '../medications/medication.ts';
-import type { MedicationDatabase } from '../medications/medication-repository.ts';
-import { inTransaction, type TransactionDatabase } from '../medications/transaction.ts';
+import type { MedicationDatabase, TransactionDatabase } from '../medications/database-types.ts';
+import { followingDay, localDay, scheduledDate } from '../medications/local-date.ts';
+import { doseDeadline } from '../medications/dose-timing.ts';
+import { inTransaction } from '../medications/transaction.ts';
 
-export const GRACE_MINUTES = DEFAULT_GRACE_MINUTES;
-export function doseDeadline(day: string, time: string, graceMinutes = DEFAULT_GRACE_MINUTES): Date {
-  if (!isGraceMinutes(graceMinutes)) throw new Error('執行猶予時間が正しくありません。');
-  return new Date(scheduledDate(day, time).getTime() + graceMinutes * 60_000);
-}
-
-export function wasScheduledBeforeDose(medication: Pick<Medication, 'createdAt' | 'scheduleStartsAt' | 'doseTime'>, day: string): boolean {
-  return Date.parse(medication.scheduleStartsAt ?? medication.createdAt) <= scheduledDate(day, medication.doseTime).getTime();
-}
-
-export function doseStartsAt(day: string, time: string, beforeMinutes = 0): Date {
-  if (!isGraceBeforeMinutes(beforeMinutes)) throw new Error('前の猶予時間が正しくありません。');
-  return new Date(scheduledDate(day, time).getTime() - beforeMinutes * 60_000);
-}
-
-export function doseCountdown(medication: Medication, day: string, now: Date): {
-  phase: 'until-dose' | 'until-penalty' | 'expired'; remainingSeconds: number;
-} {
-  const scheduledAt = scheduledDate(day, medication.doseTime);
-  const deadline = doseDeadline(day, medication.doseTime, medicationGraceMinutes(medication.graceMinutes));
-  const target = now.getTime() < scheduledAt.getTime() ? scheduledAt : deadline;
-  if (now.getTime() >= deadline.getTime()) return { phase: 'expired', remainingSeconds: 0 };
-  return {
-    phase: now.getTime() < scheduledAt.getTime() ? 'until-dose' : 'until-penalty',
-    remainingSeconds: Math.max(0, Math.ceil((target.getTime() - now.getTime()) / 1_000)),
-  };
-}
-
-export function formatDoseCountdown(remainingSeconds: number, showSeconds: boolean): string {
-  const safeSeconds = Number.isFinite(remainingSeconds) ? Math.max(0, Math.ceil(remainingSeconds)) : 0;
-  if (showSeconds) {
-    const minutes = Math.floor(safeSeconds / 60);
-    const seconds = safeSeconds % 60;
-    return minutes > 0 ? `${minutes}分${seconds}秒` : `${seconds}秒`;
-  }
-  const totalMinutes = Math.max(1, Math.ceil(safeSeconds / 60));
-  const days = Math.floor(totalMinutes / (24 * 60));
-  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
-  const minutes = totalMinutes % 60;
-  if (days > 0) return `${days}日${hours > 0 ? `${hours}時間` : ''}${minutes > 0 ? `${minutes}分` : ''}`;
-  if (hours > 0) return `${hours}時間${minutes > 0 ? `${minutes}分` : ''}`;
-  return `${minutes}分`;
-}
+// Keep existing imports working while timing rules live with the medication domain.
+export {
+  GRACE_MINUTES,
+  doseCountdown,
+  doseDeadline,
+  doseStartsAt,
+  formatDoseCountdown,
+  wasScheduledBeforeDose,
+} from '../medications/dose-timing.ts';
 
 export type PenaltyPayment = {
   id: number; medicationId: number; medicationName: string; scheduledDay: string;
@@ -64,12 +29,6 @@ const columns = `id, medication_id AS medicationId, medication_name AS medicatio
 
 export function listPenaltyPayments(db: MedicationDatabase): Promise<PenaltyPayment[]> {
   return db.getAllAsync<PenaltyPayment>(`SELECT ${columns} FROM penalty_payments ORDER BY scheduled_day DESC, dose_time DESC, id DESC`);
-}
-
-function followingDay(day: string): string {
-  const date = scheduledDate(day, '12:00');
-  date.setDate(date.getDate() + 1);
-  return localDay(date);
 }
 
 // Local test settlement only. A production adapter must settle server-side with consent,

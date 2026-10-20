@@ -1,0 +1,6 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="jp.jphacks.reminders.tests">
+  <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="36" />
+  <application android:label="Notification regression tests" />
+  <instrumentation android:name="jp.jphacks.reminders.tests.NotificationAlarmTest"
+    android:targetPackage="jp.jphacks.ok2605.preview" android:functionalTest="true" />
+</manifest>

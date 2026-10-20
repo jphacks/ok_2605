@@ -8,7 +8,7 @@ import { MedicationChargeConsent } from '@/components/medication-charge-consent'
 import { MedicationRegistryStatus } from '@/components/medication-registry-status';
 import { MedicationScreen, medicationColors as C } from '@/components/medication-screen';
 import { TimeDropdown } from '@/components/time-dropdown';
-import { localDay, scheduledDate } from '@/features/medications/dose-record';
+import { addLocalDays, localDay } from '@/features/medications/local-date';
 import { DEFAULT_GRACE_MINUTES } from '@/features/medications/grace-period';
 import { MIN_PENALTY_AMOUNT, MedicationValidationError, type MedicationFieldErrors, type MedicationPlanInput } from '@/features/medications/medication';
 import { validateMedicationPlan } from '@/features/medications/medication-plan';
@@ -19,12 +19,6 @@ import { useNfcBox } from '@/state/nfc-box-context';
 const UNITS = ['錠', 'カプセル', '包', 'mL', '回'];
 type PeriodMode = 'none' | 'days' | 'date';
 type DoseInput = { id: number; medicationId?: number; doseTime: string; doseAmount: string };
-
-function addDays(day: string, amount: number) {
-  const date = scheduledDate(day, '12:00');
-  date.setDate(date.getDate() + amount);
-  return localDay(date);
-}
 
 function formatDay(day: string) {
   const [year, month, date] = day.split('-').map(Number);
@@ -48,7 +42,7 @@ export function MedicationPlanForm({ medicationId, initialValue }: { medicationI
   const [startDay, setStartDay] = useState(() => initialValue?.startDay ?? localDay(new Date()));
   const [periodMode, setPeriodMode] = useState<PeriodMode>(initialValue?.endDay ? 'date' : 'none');
   const [durationDays, setDurationDays] = useState('30');
-  const [selectedEndDay, setSelectedEndDay] = useState(() => initialValue?.endDay ?? addDays(initialValue?.startDay ?? localDay(new Date()), 29));
+  const [selectedEndDay, setSelectedEndDay] = useState(() => initialValue?.endDay ?? addLocalDays(initialValue?.startDay ?? localDay(new Date()), 29));
   const [calendarTarget, setCalendarTarget] = useState<'start' | 'end' | null>(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(initialValue?.notificationsEnabled ?? true);
   const [unit, setUnit] = useState(initialValue?.unit ?? UNITS[0]);
@@ -68,7 +62,7 @@ export function MedicationPlanForm({ medicationId, initialValue }: { medicationI
     if (periodMode === 'none') return null;
     if (periodMode === 'date') return selectedEndDay;
     const days = Number(durationDays);
-    return Number.isSafeInteger(days) && days > 0 ? addDays(startDay, days - 1) : null;
+    return Number.isSafeInteger(days) && days > 0 ? addLocalDays(startDay, days - 1) : null;
   }, [durationDays, periodMode, selectedEndDay, startDay]);
 
   const clearError = () => { setErrors({}); setFormError(''); };

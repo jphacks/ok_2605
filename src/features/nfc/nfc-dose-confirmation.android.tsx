@@ -9,6 +9,7 @@ import { getMedicationDatabase } from '@/features/medications/database';
 import { useDoseRecords } from '@/state/dose-record-context';
 import { useMedicationRegistry } from '@/state/medication-registry-context';
 import { useNfcBox } from '@/state/nfc-box-context';
+import { useReminders } from '@/state/reminder-context';
 import { confirmNfcDose } from './nfc-box-repository';
 import { NfcReadError, readNfcTag } from './nfc-reader.android';
 
@@ -23,6 +24,7 @@ export default function NfcDoseConfirmationScreen() {
   const { medications, isLoading: medicationsLoading } = useMedicationRegistry();
   const { records, isLoading: recordsLoading, refresh: refreshDoseRecords } = useDoseRecords();
   const { boxes, loading: boxLoading, error: boxError, reload } = useNfcBox();
+  const { refresh: refreshReminders } = useReminders();
   const box = boxes.find((item) => item.medications.some((m) => m.id === medicationId) && item.tagId);
   const medication = medications.find((item) => item.id === medicationId);
   const names = box?.medications.filter((item) => item.doseTime === medication?.doseTime && isMedicationActiveOnDay(item, occurrenceDay)).map((item) => item.name).join('・') || medication?.name;
@@ -67,6 +69,7 @@ export default function NfcDoseConfirmationScreen() {
       const result = await confirmNfcDose(database, tagId, medication.id, params.scheduledDay, request.signal);
       if (request.signal.aborted || !active.current) return;
       await Promise.all([reload(), refreshDoseRecords()]);
+      await refreshReminders();
       if (!active.current) return;
       router.replace({
         pathname: '/dose-complete',
@@ -87,7 +90,7 @@ export default function NfcDoseConfirmationScreen() {
       if (controller.current === request) controller.current = null;
       if (active.current) setBusy(false);
     }
-  }, [busy, medication, params.scheduledDay, refreshDoseRecords, reload, router]);
+  }, [busy, medication, params.scheduledDay, refreshDoseRecords, refreshReminders, reload, router]);
 
   useEffect(() => {
     if (!focused || medicationsLoading || recordsLoading || boxLoading || boxError || !validOccurrence

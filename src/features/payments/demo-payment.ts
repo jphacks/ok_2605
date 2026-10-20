@@ -1,3 +1,7 @@
+import { localDay } from '../medications/local-date.ts';
+
+export { localDay } from '../medications/local-date.ts';
+
 // A fixed demo condition, not the production grace-period policy.
 export const DEMO_GRACE_MINUTES = 30;
 export type DemoScenario = 'overdue' | 'within-grace' | 'taken';
@@ -41,10 +45,6 @@ export type DemoPaymentResult =
   | { kind: 'processed' | 'already-succeeded'; payment: DemoPayment };
 
 export class DemoPaymentInputError extends Error {}
-
-export function localDay(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
 
 export function demoDeadline(day: string, doseTime: string): Date {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(doseTime)) {

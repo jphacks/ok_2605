@@ -1,4 +1,4 @@
-import type { MedicationDatabase } from '../medications/medication-repository.ts';
+import type { MedicationDatabase } from '../medications/database-types.ts';
 import { inTransaction, type TransactionDatabase } from '../medications/transaction.ts';
 
 // Only these fictional presets can be registered; no real card number or CVC is accepted.

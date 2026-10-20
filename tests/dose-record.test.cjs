@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const { DatabaseSync } = require('node:sqlite');
+const { createDatabase } = require('./helpers/database.cjs');
 const { test } = require('node:test');
 
 const { buildDailySchedule, localDay, nextScheduledDose } = require('../src/features/medications/dose-record.ts');
@@ -7,28 +7,9 @@ const { listDoseRecordsBetween, listDoseRecordsForDay, saveDoseRecord } = requir
 const { initializeMedicationDatabase, saveMedication } = require('../src/features/medications/medication-repository.ts');
 const { buildHistoryDay, monthCalendarDays, monthRange } = require('../src/features/medications/medication-history.ts');
 
-function createDatabase() {
-  const connection = new DatabaseSync(':memory:');
-  const db = {
-    async execAsync(source) { connection.exec(source); },
-    async runAsync(source, ...params) {
-      const result = connection.prepare(source).run(...params);
-      return { lastInsertRowId: Number(result.lastInsertRowid), changes: Number(result.changes) };
-    },
-    async getAllAsync(source, ...params) {
-      return connection.prepare(source).all(...params).map((row) => ({ ...row }));
-    },
-    async getFirstAsync(source, ...params) {
-      const row = connection.prepare(source).get(...params);
-      return row ? { ...row } : null;
-    },
-  };
-  return { connection, db };
-}
-
 test('dose records are unique per medication and local day', async (context) => {
-  const { connection, db } = createDatabase();
-  context.after(() => connection.close());
+  const { close, db } = createDatabase();
+  context.after(close);
   await initializeMedicationDatabase(db);
   const medication = await saveMedication(db, { name: '朝の薬', doseTime: '08:00', penaltyAmount: '300' });
   const first = await saveDoseRecord(db, medication.id, '2026-10-18', 'qr', '2026-10-17T23:05:00.000Z');
@@ -41,8 +22,8 @@ test('dose records are unique per medication and local day', async (context) => 
 });
 
 test('dose records reject unknown medication and invalid input', async (context) => {
-  const { connection, db } = createDatabase();
-  context.after(() => connection.close());
+  const { close, db } = createDatabase();
+  context.after(close);
   await initializeMedicationDatabase(db);
   await assert.rejects(saveDoseRecord(db, 999, '2026-10-18', 'qr'), /見つかりません/);
   await assert.rejects(saveDoseRecord(db, 1, '2026-02-30', 'qr'), /日付/);
@@ -85,8 +66,8 @@ test('schedule selects overdue, upcoming, then tomorrow', () => {
 });
 
 test('history records can be loaded by an inclusive date range', async (context) => {
-  const { connection, db } = createDatabase();
-  context.after(() => connection.close());
+  const { close, db } = createDatabase();
+  context.after(close);
   await initializeMedicationDatabase(db);
   const medication = await saveMedication(db, { name: '朝の薬', doseTime: '08:00', penaltyAmount: '300' });
   const october = await saveDoseRecord(db, medication.id, '2026-10-18', 'qr', '2026-10-17T23:05:00.000Z');

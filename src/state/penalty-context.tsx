@@ -25,12 +25,14 @@ export function PenaltyProvider({ children }: PropsWithChildren) {
 
   const refresh = useCallback(() => {
     const work = queue.current.then(async () => {
-      if (!mounted.current) return;
+      if (!mounted.current || AppState.currentState !== 'active') return;
       try {
         const db = await getMedicationDatabase();
+        if (!mounted.current || AppState.currentState !== 'active') return;
         const saved = await reconcilePenalties(db);
         if (mounted.current) { setPayments(saved); setError(null); }
-        // A delayed iOS notification must not hold up the next deadline check.
+        // Test settlement is foreground-only. The OS deadline notification does
+        // not read the database or create a payment while the app is closed.
         void notifyPayments(saved);
       } catch {
         if (mounted.current) setError('飲み忘れと決済結果を確認できませんでした。再読み込みしてください。');
@@ -50,9 +52,18 @@ export function PenaltyProvider({ children }: PropsWithChildren) {
   }, [medications, isLoading, loadError, records, refresh]);
 
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', (state) => { if (state === 'active') void refresh(); });
-    const timer = setInterval(() => { void refresh(); }, 15_000);
-    return () => { subscription.remove(); clearInterval(timer); };
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const updateTimer = (state: string) => {
+      if (timer) clearInterval(timer);
+      timer = undefined;
+      if (state === 'active') timer = setInterval(() => { void refresh(); }, 15_000);
+    };
+    updateTimer(AppState.currentState);
+    const subscription = AppState.addEventListener('change', (state) => {
+      updateTimer(state);
+      if (state === 'active') void refresh();
+    });
+    return () => { subscription.remove(); if (timer) clearInterval(timer); };
   }, [refresh]);
 
   const acknowledge = async (ids: number[]) => {
