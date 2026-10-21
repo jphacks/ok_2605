@@ -8,7 +8,7 @@ import { BunnyArt } from '@/components/nomupay-art';
 import { groupPenaltyPayments } from '@/features/payments/penalty-groups';
 
 export default function MissedScreen() {
-  const { demo } = useLocalSearchParams<{ demo?: string }>();
+  const { demo, readingExpired } = useLocalSearchParams<{ demo?: string; readingExpired?: string }>();
   const demoMode = demo === '1';
   const { payments, pending, acknowledge, loading, error: loadError, refresh } = usePenalties();
   const [busy, setBusy] = useState(false);
@@ -49,6 +49,7 @@ export default function MissedScreen() {
       <Text style={styles.kicker}>LET’S TRY AGAIN</Text>
       <BunnyArt />
       <Text accessibilityRole="header" style={styles.title}>{succeeded.length ? '課金されました' : failed.length ? '課金できませんでした' : '飲み忘れのお知らせ'}</Text>
+      {!demoMode && readingExpired === '1' && <Text style={styles.copy}>服用期限を過ぎたため、読み取りできません。</Text>}
       <Text style={styles.copy}>{visiblePayments.length ? '設定した猶予を過ぎても\n服用の記録がなかった予定があります。' : loading ? '服薬状況を確認しています…' : '未確認のお知らせはありません。'}</Text>
       {demoMode && <Text style={styles.demoNote}>これは表示確認用のデモです。実際の決済・服薬記録は変更されません。</Text>}
       {groups.map((group) => <View key={group.deadlineAt} style={styles.card}>
